@@ -1,0 +1,712 @@
+/* Чат — орчин үеийн гүн хөх неон загвар, Монгол UI, утасанд ээлтэй. */
+:root {
+  --bg: #050b1e;
+  --bg2: #0a1230;
+  --card: #0e1a3d;
+  --card2: #12224f;
+  --border: #24366e;
+  --text: #eef2ff;
+  --muted: #9aa8d6;
+  --accent: #38bdf8;
+  --accent2: #818cf8;
+  --gold: #f6c453;
+  --danger: #f87171;
+  --green: #34d399;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  background: radial-gradient(1200px 600px at 80% -10%, #1b2a6b 0%, transparent 60%),
+    radial-gradient(900px 500px at -10% 10%, #0e3a5c 0%, transparent 55%), var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+a {
+  color: var(--accent);
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+input,
+textarea {
+  font-family: inherit;
+  font-size: 1rem;
+  color: var(--text);
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  width: 100%;
+}
+
+input:focus,
+textarea:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.container {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+
+.loading {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+}
+
+/* Толгой */
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: rgba(5, 11, 30, 0.92);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border);
+}
+
+.header-inner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 60px;
+  flex-wrap: wrap;
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 1.35rem;
+  font-weight: 800;
+}
+
+.brand-icon {
+  font-size: 1.6rem;
+  filter: drop-shadow(0 0 10px rgba(56, 189, 248, 0.7));
+}
+
+.main-nav {
+  display: flex;
+  gap: 6px;
+  flex: 1;
+  flex-wrap: wrap;
+}
+
+.main-nav button {
+  background: none;
+  border: 1px solid transparent;
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-size: 0.95rem;
+}
+
+.main-nav button.active {
+  color: var(--text);
+  background: var(--card2);
+  border-color: var(--border);
+}
+
+.header-user {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.header-user-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.main-content {
+  padding-top: 20px;
+  padding-bottom: 40px;
+}
+
+.site-footer {
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  padding: 16px 0 28px;
+  font-size: 0.9rem;
+}
+
+/* Товчнууд */
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  color: #04122b;
+  border: none;
+  border-radius: 999px;
+  padding: 10px 18px;
+  font-weight: 700;
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary.small,
+.btn-ghost.small,
+.btn-danger-ghost.small {
+  padding: 6px 12px;
+  font-size: 0.9rem;
+}
+
+.btn-ghost {
+  background: var(--card2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 10px 16px;
+  font-weight: 600;
+}
+
+.btn-danger-ghost {
+  background: none;
+  color: var(--danger);
+  border: 1px solid rgba(248, 113, 113, 0.4);
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-weight: 600;
+}
+
+.error {
+  color: #fca5a5;
+  background: rgba(248, 113, 113, 0.12);
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.notice {
+  color: #a7f3d0;
+  background: rgba(52, 211, 153, 0.12);
+  border: 1px solid rgba(52, 211, 153, 0.35);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.muted.small,
+.small {
+  font-size: 0.85rem;
+}
+
+.empty {
+  color: var(--muted);
+  text-align: center;
+  padding: 24px 12px;
+}
+
+/* Нэвтрэх */
+.auth-wrap {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px 16px;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 28px 24px;
+  box-shadow: 0 0 40px rgba(56, 189, 248, 0.18);
+  text-align: center;
+}
+
+.auth-logo {
+  font-size: 3rem;
+  filter: drop-shadow(0 0 14px rgba(56, 189, 248, 0.8));
+}
+
+.auth-card h1 {
+  margin: 8px 0 4px;
+}
+
+.auth-sub {
+  color: var(--muted);
+  margin-top: 0;
+}
+
+.auth-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 16px 0;
+}
+
+.auth-tabs button {
+  flex: 1;
+  background: var(--bg2);
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 9px;
+  font-weight: 700;
+}
+
+.auth-tabs button.active {
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  color: #04122b;
+  border-color: transparent;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-align: left;
+}
+
+.auth-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+/* Пост (нүүр) */
+.composer {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 14px;
+  margin-bottom: 16px;
+}
+
+.composer-head {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.composer-head textarea {
+  flex: 1;
+  resize: vertical;
+  min-height: 64px;
+}
+
+.composer-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 10px;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.avatar {
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  color: #04122b;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+}
+
+.avatar.small {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  font-size: 0.85rem;
+}
+
+.post-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 14px;
+  margin-bottom: 14px;
+}
+
+.post-head {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.post-meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.post-time {
+  display: block;
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin-top: 2px;
+}
+
+.post-content {
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.55;
+  margin: 12px 0;
+}
+
+.post-actions {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+.like-btn {
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.like-btn.liked {
+  color: #fda4af;
+}
+
+.comment-count {
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.comments {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.comment {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.comment-body {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 8px 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.comment-body p {
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.comment-form {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.comment-form input {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Нэрний дээрх тэмдэг */
+.user-name {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.25;
+}
+
+.role-badge {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  margin-bottom: 2px;
+  white-space: nowrap;
+}
+
+.role-admin {
+  background: linear-gradient(135deg, #f6c453, #f59e0b);
+  color: #3a2503;
+  box-shadow: 0 0 12px rgba(246, 196, 83, 0.55);
+}
+
+.role-moderator {
+  background: linear-gradient(135deg, #38bdf8, #818cf8);
+  color: #04122b;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.5);
+}
+
+.user-name-text {
+  font-weight: 700;
+}
+
+.banned-badge {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 800;
+  background: rgba(248, 113, 113, 0.18);
+  color: #fca5a5;
+  border: 1px solid rgba(248, 113, 113, 0.5);
+  border-radius: 999px;
+  padding: 2px 8px;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.user-username {
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 400;
+  margin-left: 6px;
+}
+
+/* 3D эможи сонгогч */
+.emoji-picker {
+  background: var(--card2);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 10px;
+  margin-top: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+
+.emoji-picker-tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.emoji-tab {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  font-size: 1.3rem;
+  padding: 6px 10px;
+}
+
+.emoji-tab.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.5);
+}
+
+.emoji-tab.close {
+  margin-left: auto;
+  font-size: 0.9rem;
+}
+
+.emoji-picker-label {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin: 8px 2px;
+}
+
+.emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 4px;
+}
+
+.emoji-btn {
+  background: none;
+  border: none;
+  border-radius: 10px;
+  font-size: 1.7rem;
+  line-height: 1.4;
+  padding: 4px 0;
+  /* 3D сүүдэр — эможи гүнзгий, товойсон харагдана */
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.45), 0 4px 8px rgba(0, 0, 0, 0.5),
+    0 0 14px rgba(56, 189, 248, 0.35);
+}
+
+.emoji-btn:hover {
+  background: rgba(56, 189, 248, 0.15);
+  transform: scale(1.15);
+}
+
+/* Өрөөнүүд */
+.room-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.room-tab {
+  background: var(--card);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 16px;
+  padding: 14px;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.room-tab.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 18px rgba(56, 189, 248, 0.35);
+}
+
+.room-tab-label {
+  font-weight: 800;
+  font-size: 1.05rem;
+}
+
+.room-tab-desc {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.message-list {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 300px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.message {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.message.mine {
+  flex-direction: row-reverse;
+}
+
+.message.mine .message-body {
+  background: linear-gradient(135deg, #164e7a, #1e3a8a);
+  text-align: right;
+}
+
+.message.mine .user-name {
+  align-items: flex-end;
+}
+
+.message-body {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 8px 12px;
+  max-width: 75%;
+  min-width: 0;
+}
+
+.message-body p {
+  margin: 4px 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.message-time {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.message-form {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  align-items: center;
+}
+
+.message-form input {
+  flex: 1;
+  min-width: 0;
+}
+
+.locked-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 28px 20px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.locked-icon {
+  font-size: 3rem;
+  filter: drop-shadow(0 0 14px rgba(246, 196, 83, 0.6));
+}
+
+/* Гишүүд */
+.members h3 {
+  margin-top: 24px;
+}
+
+.member-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.member-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 480px) {
+  .emoji-grid {
+    grid-template-columns: repeat(6, 1fr);
+  }
+
+  .room-tabs {
+    grid-template-columns: 1fr;
+  }
+
+  .header-inner {
+    gap: 8px;
+  }
+}
