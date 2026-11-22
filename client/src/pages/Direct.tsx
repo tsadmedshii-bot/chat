@@ -7,10 +7,12 @@ export default function Direct({
   user,
   initialPartnerId,
   onPartnerOpened,
+  onViewProfile,
 }: {
   user: User;
   initialPartnerId: number | null;
   onPartnerOpened: () => void;
+  onViewProfile: (userId: number) => void;
 }) {
   const [conversations, setConversations] = useState<DirectConversation[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -121,13 +123,20 @@ export default function Direct({
         <p className="muted small">Хэнтэй ч зөвшөөрөлгүйгээр хувь чат бичиж болно.</p>
         {conversations.length === 0 && <p className="empty">Одоохондоо өөр хэрэглэгч алга.</p>}
         {conversations.map((c) => (
-          <button
+          <div
             key={c.user.id}
-            type="button"
+            role="button"
+            tabIndex={0}
             className={selectedId === c.user.id ? 'dm-item active' : 'dm-item'}
             onClick={() => selectPartner(c.user.id)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                selectPartner(c.user.id);
+              }
+            }}
           >
-            <Avatar user={c.user} size="small" showDot />
+            <Avatar user={c.user} size="small" showDot onClick={() => onViewProfile(c.user.id)} />
             <span className="dm-item-main">
               <span className="dm-item-name">{c.user.name}</span>
               <span className="dm-item-preview">
@@ -137,7 +146,7 @@ export default function Direct({
               </span>
             </span>
             {c.unreadCount > 0 && <span className="unread-badge">{c.unreadCount}</span>}
-          </button>
+          </div>
         ))}
       </div>
 
@@ -147,7 +156,7 @@ export default function Direct({
         ) : (
           <>
             <div className="dm-thread-head">
-              <Avatar user={selected.user} size="small" showDot />
+              <Avatar user={selected.user} size="small" showDot onClick={() => onViewProfile(selected.user.id)} />
               <div>
                 <strong>{selected.user.name}</strong>
                 <span className="muted small"> @{selected.user.username}</span>
