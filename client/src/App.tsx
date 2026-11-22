@@ -7,6 +7,7 @@ import Rooms from './pages/Rooms';
 import Members from './pages/Members';
 import Direct from './pages/Direct';
 import Profile from './pages/Profile';
+import ProfileModal from './components/ProfileModal';
 import { Avatar, RoleBadge } from './components/UserBadge';
 
 type View = 'home' | 'rooms' | 'direct' | 'members' | 'profile';
@@ -17,6 +18,8 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   /** Гишүүдийн жагсаалтаас «💬 Чат» дарсан хэрэглэгч — DM хуудас нээнэ. */
   const [dmPartnerId, setDmPartnerId] = useState<number | null>(null);
+  /** Профайл цонхоор харж буй хэрэглэгч — null бол цонх хаалттай. */
+  const [profileUserId, setProfileUserId] = useState<number | null>(null);
 
   useEffect(() => {
     me()
@@ -96,26 +99,32 @@ export default function App() {
             </button>
           </nav>
           <div className="header-user">
-            <Avatar user={user} size="small" showDot />
-            <span className="header-user-badge">
-              <RoleBadge role={user.role} />
-              <span>{user.name}</span>
-            </span>
-            <button type="button" className="btn-ghost small" onClick={handleLogout}>
+            <Avatar user={user} size="small" showDot onClick={() => setView('profile')} />
+            <span className="header-user-name">{user.name}</span>
+            <RoleBadge role={user.role} />
+            <button type="button" className="btn-ghost small header-logout" onClick={handleLogout}>
               Гарах
             </button>
           </div>
         </div>
       </header>
       <main className="container main-content">
-        {view === 'home' && <Home user={user} />}
-        {view === 'rooms' && <Rooms user={user} />}
+        {view === 'home' && <Home user={user} onViewProfile={setProfileUserId} />}
+        {view === 'rooms' && <Rooms user={user} onViewProfile={setProfileUserId} />}
         {view === 'direct' && (
-          <Direct user={user} initialPartnerId={dmPartnerId} onPartnerOpened={() => setDmPartnerId(null)} />
+          <Direct
+            user={user}
+            initialPartnerId={dmPartnerId}
+            onPartnerOpened={() => setDmPartnerId(null)}
+            onViewProfile={setProfileUserId}
+          />
         )}
-        {view === 'members' && <Members user={user} onOpenDm={openDm} />}
+        {view === 'members' && <Members user={user} onOpenDm={openDm} onViewProfile={setProfileUserId} />}
         {view === 'profile' && <Profile user={user} onUserChange={setUser} />}
       </main>
+      {profileUserId !== null && (
+        <ProfileModal userId={profileUserId} meId={user.id} onClose={() => setProfileUserId(null)} onOpenDm={openDm} />
+      )}
       <footer className="site-footer">
         <div className="container">
           <span>Чат — пост ба 2 өрөө 🌍 🏰</span>
