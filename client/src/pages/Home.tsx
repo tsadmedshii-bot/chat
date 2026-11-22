@@ -14,7 +14,7 @@ function timeAgo(iso: string): string {
   return new Date(iso).toLocaleDateString('mn-MN');
 }
 
-export default function Home({ user }: { user: User }) {
+export default function Home({ user, onViewProfile }: { user: User; onViewProfile: (userId: number) => void }) {
   const [posts, setPosts] = useState<Post[]>([]);
   const [draft, setDraft] = useState('');
   const [commentDrafts, setCommentDrafts] = useState<Record<number, string>>({});
@@ -128,7 +128,7 @@ export default function Home({ user }: { user: User }) {
       {posts.map((post) => (
         <article key={post.id} className="post-card">
           <header className="post-head">
-            <Avatar user={post.author} showDot />
+            <Avatar user={post.author} showDot onClick={() => onViewProfile(post.author.id)} />
             <div className="post-meta">
               <UserName user={post.author} />
               <span className="post-time">{timeAgo(post.createdAt)}</span>
@@ -153,7 +153,7 @@ export default function Home({ user }: { user: User }) {
           <div className="comments">
             {post.comments.map((c) => (
               <div key={c.id} className="comment">
-                <Avatar user={c.author} size="small" showDot />
+                <Avatar user={c.author} size="small" showDot onClick={() => onViewProfile(c.author.id)} />
                 <div className="comment-body">
                   <UserName user={c.author} />
                   <p>{c.content}</p>
