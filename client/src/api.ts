@@ -216,6 +216,11 @@ export async function removeAvatar(): Promise<User> {
   return unwrapOne(data);
 }
 
+/** Өөрийн профайлыг нууц үгээрээ баталгаажуулж бүрмөсөн устгана. */
+export async function deleteMyAccount(password: string): Promise<void> {
+  await api<void>('/api/me', { method: 'DELETE', body: JSON.stringify({ password }) });
+}
+
 /** Хэрэглэгчийн профайл (зураг, онлайн төлөв, постын тоо). */
 export async function getUserProfile(userId: number): Promise<UserProfile> {
   return api<UserProfile>(`/api/users/${userId}`);
