@@ -7,6 +7,9 @@ export const users = pgTable('users', {
   passwordHash: text('password_hash').notNull(),
   role: varchar('role', { length: 10 }).notNull().default('member'),
   banned: boolean('banned').notNull().default(false),
+  /** Хугацаатай бан дуусах цаг — NULL = хугацаатай бан байхгүй. Байнга бан нь
+      `banned` (boolean) баганаар тэмдэглэгдэнэ. */
+  bannedUntil: timestamp('banned_until'),
   /** Жижиг админд бандах эрх олгосон эсэх — зөвхөн том админ асааж/унтраана. Анхдагчаар false. */
   canBan: boolean('can_ban').notNull().default(false),
   /** Сүүлд идэвхтэй байсан цаг — heartbeat / нэвтрэлт / бүртгэлээс шинэчлэгдэнэ. */
@@ -59,6 +62,21 @@ export const roomAccess = pgTable('room_access', {
   createdAt: timestamp('created_at').notNull().defaultNow(),
   decidedAt: timestamp('decided_at'),
 }, (t) => [uniqueIndex('room_access_user_unique').on(t.userId)]);
+
+/** Бангийн түүх — хэн, хэнийг, хэр хугацаагаар бандсан, хэзээ тайлсан. */
+export const banLogs = pgTable('ban_logs', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id),
+  bannedById: integer('banned_by_id').notNull().references(() => users.id),
+  /** Бангийн хугацаа минутаар — NULL = байнга. */
+  durationMinutes: integer('duration_minutes'),
+  bannedAt: timestamp('banned_at').notNull().defaultNow(),
+  expiresAt: timestamp('expires_at'),
+  unbannedAt: timestamp('unbanned_at'),
+  unbannedById: integer('unbanned_by_id').references(() => users.id),
+  /** Хугацаа нь дуусч автоматаар тайлагдсан эсэх. */
+  autoExpired: boolean('auto_expired').notNull().default(false),
+});
 
 /** Хувь чат (1:1) мессеж. */
 export const directMessages = pgTable('direct_messages', {
