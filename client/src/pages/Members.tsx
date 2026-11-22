@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { AccessRequest, MemberRow, User } from '../../../shared/src/types';
+import type { AccessRequest, BanLog, MemberRow, User } from '../../../shared/src/types';
 import {
   ApiError,
   adminApproveAccess,
@@ -12,6 +12,7 @@ import {
   adminRevokeBanPermission,
   adminRevokeModerator,
   adminUnbanUser,
+  getBanLogs,
 } from '../api';
 import UserName, { Avatar } from '../components/UserBadge';
 
@@ -21,6 +22,34 @@ function accessLabel(row: MemberRow): string {
   if (row.privateAccess === 'pending') return 'Хүлээгдэж байна';
   if (row.privateAccess === 'denied') return 'Татгалзсан';
   return 'Хүсэлтгүй';
+}
+
+/** Хэрэглэгч одоо бантай эсэх — байнга бан ЭСВЭЛ хугацаа нь дуусаагүй бан. */
+function isBannedUser(u: User): boolean {
+  if (u.banned) return true;
+  return u.bannedUntil !== null && new Date(u.bannedUntil).getTime() > Date.now();
+}
+
+function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleString('mn-MN', {
+    timeZone: 'Asia/Ulaanbaatar',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function durationLabel(minutes: number | null): string {
+  if (minutes === null) return 'Байнга';
+  if (minutes === 1440) return '24 цаг';
+  return `${minutes} минут`;
+}
+
+function statusLabel(status: BanLog['status']): string {
+  if (status === 'active') return 'Идэвхтэй';
+  if (status === 'expired') return 'Хугацаа дууссан';
+  return 'Цуцалсан';
 }
 
 export default function Members({
@@ -34,6 +63,8 @@ export default function Members({
 }) {
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [requests, setRequests] = useState<AccessRequest[]>([]);
+  const [banLogs, setBanLogs] = useState<BanLog[]>([]);
+  const [banTargetId, setBanTargetId] = useState<number | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const isAdmin = user.role === 'admin';
@@ -52,6 +83,7 @@ export default function Members({
       setMembers(await adminListMembers());
       if (isAdmin) {
         setRequests(await adminListAccessRequests());
+        setBanLogs(await getBanLogs());
       }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Гишүүдийн жагсаалт ачааллахад алдаа гарлаа.');
@@ -114,12 +146,16 @@ export default function Members({
     }
   }
 
-  async function ban(id: number, name: string): Promise<void> {
-    if (!window.confirm(`«${name}» хэрэглэгчийг бандах уу? Бандуулсан хэрэглэгч нэвтэрч, пост оруулж, чат бичиж чадахгүй болно.`)) return;
+  async function ban(id: number, name: string, durationMinutes: number | null): Promise<void> {
     setError('');
     try {
-      await adminBanUser(id);
-      setNotice('Хэрэглэгчийг бандлаа. 🚫');
+      await adminBanUser(id, durationMinutes);
+      setNotice(
+        durationMinutes === null
+          ? `«${name}» хэрэглэгчийг байнга бандлаа. 🚫`
+          : `«${name}» хэрэглэгчийг ${durationLabel(durationMinutes)}-аар бандлаа. 🚫`,
+      );
+      setBanTargetId(null);
       await refresh();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Алдаа гарлаа.');
@@ -193,13 +229,78 @@ export default function Members({
         </>
       )}
 
+      {isAdmin && (
+        <>
+          <h3>🚫 Бантай хэрэглэгчид ({banLogs.filter((l) => l.status === 'active').length})</h3>
+          <p className="muted small">Одоо бантай байгаа хэрэглэгчид — бан тайлахад эндээс шууд тайлж болно.</p>
+          {banLogs.filter((l) => l.status === 'active').length === 0 ? (
+            <p className="empty">Одоо бантай хэрэглэгч алга.</p>
+          ) : (
+            banLogs
+              .filter((l) => l.status === 'active')
+              .map((log) => (
+                <div key={log.id} className="ban-log-row">
+                  <div>
+                    <strong>{log.user.name}</strong>
+                    <span className="muted"> (@{log.user.username})</span>
+                    <div className="muted small">
+                      Бандсан: {log.bannedBy.name} · {formatDateTime(log.bannedAt)} · {durationLabel(log.durationMinutes)}
+                      {log.expiresAt ? ` · дуусах: ${formatDateTime(log.expiresAt)}` : ' · Байнга'}
+                    </div>
+                  </div>
+                  <button type="button" className="btn-primary small" onClick={() => void unban(log.user.id)}>
+                    Бан цуцлах
+                  </button>
+                </div>
+              ))
+          )}
+        </>
+      )}
+
+      {isAdmin && (
+        <>
+          <h3>📜 Бангийн түүх ({banLogs.length})</h3>
+          <p className="muted small">Хэн, хэнийг, хэр хугацаагаар бандсан нь энд харагдана. Хугацаа нь дууссан бан автоматаар тайлагдаж, «Хугацаа дууссан» гэж тэмдэглэгдэнэ.</p>
+          {banLogs.length === 0 ? (
+            <p className="empty">Одоохондоо бангийн түүх алга.</p>
+          ) : (
+            banLogs.map((log) => (
+              <div key={log.id} className="ban-log-row">
+                <div>
+                  <strong>{log.bannedBy.name}</strong>
+                  <span className="muted"> бандлаа: </span>
+                  <strong>{log.user.name}</strong>
+                  <span className="muted"> (@{log.user.username})</span>
+                  <div className="muted small">
+                    {formatDateTime(log.bannedAt)} · {durationLabel(log.durationMinutes)}
+                    {log.expiresAt ? ` · дуусах: ${formatDateTime(log.expiresAt)}` : ''}
+                    {log.unbannedAt
+                      ? ` · ${log.autoExpired ? 'хугацаа дуусч тайлагдсан' : `тайлсан: ${log.unbannedBy ? log.unbannedBy.name : ''} (${formatDateTime(log.unbannedAt)})`}`
+                      : ''}
+                  </div>
+                </div>
+                <span className={log.status === 'active' ? 'banned-badge' : 'muted small'}>
+                  {statusLabel(log.status)}
+                </span>
+              </div>
+            ))
+          )}
+        </>
+      )}
+
       <h3>👥 Бүх гишүүд ({members.length})</h3>
       {members.map((row) => (
         <div key={row.user.id} className="member-row">
           <Avatar user={row.user} showDot onClick={() => onViewProfile(row.user.id)} />
           <div>
             <UserName user={row.user} />
-            {row.user.banned && <span className="banned-badge">🚫 Бандуулсан</span>}
+            {isBannedUser(row.user) && (
+              <span className="banned-badge">
+                {row.user.banned
+                  ? '🚫 Байнга бантай'
+                  : `🚫 Бантай: ${row.user.bannedUntil ? formatDateTime(row.user.bannedUntil) : ''} хүртэл`}
+              </span>
+            )}
             <div className="muted small">
               {row.user.online ? '🟢 Онлайн — одоо байна' : '⚪ Офлайн'}
             </div>
@@ -238,12 +339,40 @@ export default function Members({
               </>
             )}
             {canBanRow(row) &&
-              (row.user.banned ? (
+              (isBannedUser(row.user) ? (
                 <button type="button" className="btn-primary small" onClick={() => void unban(row.user.id)}>
                   Бан тайлах
                 </button>
+              ) : banTargetId === row.user.id ? (
+                <span className="ban-chooser">
+                  <span className="muted small">Хугацаа:</span>
+                  {([5, 15, 30, 1440] as const).map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      className="btn-danger-ghost small"
+                      onClick={() => void ban(row.user.id, row.user.name, m)}
+                    >
+                      {durationLabel(m)}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    className="btn-danger-ghost small"
+                    onClick={() => void ban(row.user.id, row.user.name, null)}
+                  >
+                    Байнга
+                  </button>
+                  <button type="button" className="btn-ghost small" onClick={() => setBanTargetId(null)}>
+                    Цуцлах
+                  </button>
+                </span>
               ) : (
-                <button type="button" className="btn-danger-ghost small" onClick={() => void ban(row.user.id, row.user.name)}>
+                <button
+                  type="button"
+                  className="btn-danger-ghost small"
+                  onClick={() => setBanTargetId(row.user.id)}
+                >
                   🚫 Бандах
                 </button>
               ))}
