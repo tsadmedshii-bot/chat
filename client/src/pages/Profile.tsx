@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { User } from '../../../shared/src/types';
-import { ApiError, getUserProfile, removeAvatar, uploadAvatar } from '../api';
+import { ApiError, deleteMyAccount, getUserProfile, logout, removeAvatar, uploadAvatar } from '../api';
+import InstallApp from '../components/InstallApp';
 import { Avatar, RoleBadge } from '../components/UserBadge';
 import Lightbox from '../components/Lightbox';
 
@@ -38,13 +39,18 @@ function resizeImageToDataUrl(file: File): Promise<string> {
   });
 }
 
-export default function Profile({ user, onUserChange }: { user: User; onUserChange: (u: User) => void }) {
+export default function Profile({ user, onUserChange, onAccountDeleted }: { user: User; onUserChange: (u: User) => void; onAccountDeleted: () => void }) {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [uploading, setUploading] = useState(false);
   const [postCount, setPostCount] = useState<number | null>(null);
   const [lightbox, setLightbox] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
+  // Профайл устгах баталгаажуулалт.
+  const [showDelete, setShowDelete] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteError, setDeleteError] = useState('');
+  const [deleting, setDeleting] = useState(false);
 
   // Постын тоог профайлаас авна.
   useEffect(() => {
@@ -107,6 +113,21 @@ export default function Profile({ user, onUserChange }: { user: User; onUserChan
     }
   }
 
+  async function onDeleteAccount(e: React.FormEvent): Promise<void> {
+    e.preventDefault();
+    setDeleteError('');
+    setDeleting(true);
+    try {
+      await deleteMyAccount(deletePassword);
+      logout();
+      onAccountDeleted();
+    } catch (err) {
+      setDeleteError(err instanceof ApiError ? err.message : 'Профайл устгахад алдаа гарлаа.');
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
     <div className="profile">
       <div className="profile-card">
@@ -155,6 +176,62 @@ export default function Profile({ user, onUserChange }: { user: User; onUserChan
           Зураг автоматаар 512×512 хэмжээтэй болж жижигрэнэ. Зөвхөн JPEG, PNG, WebP — 500 KB хүртэл.
           {user.avatar ? ' Зургийг томруулж харахын тулд дарна уу.' : ''}
         </p>
+
+        <InstallApp />
+
+        <div className="danger-zone">
+          <h3>⚠️ Аюултай бүс</h3>
+          {user.role === 'admin' ? (
+            <p className="muted small">
+              Том админ өөрийн профайлыг устгах боломжгүй — чат админгүй үлдэнэ.
+            </p>
+          ) : !showDelete ? (
+            <button type="button" className="btn-danger" onClick={() => setShowDelete(true)}>
+              🗑️ Профайл устгах
+            </button>
+          ) : (
+            <form onSubmit={(e) => void onDeleteAccount(e)} className="delete-confirm">
+              <p>
+                Профайлаа устгавал дараах зүйлс <strong>бүрмөсөн</strong> арилна, буцааж сэргээх
+                боломжгүй:
+              </p>
+              <ul>
+                <li>Профайл зураг</li>
+                <li>Постууд, сэтгэгдлүүд, таалагдсан тэмдэгтүүд</li>
+                <li>Өрөөний мессежүүд</li>
+                <li>Хувь чатууд</li>
+              </ul>
+              <label>
+                Баталгаажуулахын тулд нууц үгээ оруулна уу
+                <input
+                  type="password"
+                  value={deletePassword}
+                  onChange={(e) => setDeletePassword(e.target.value)}
+                  placeholder="Нууц үг"
+                  autoComplete="current-password"
+                />
+              </label>
+              {deleteError && <p className="error">{deleteError}</p>}
+              <div className="profile-actions">
+                <button type="submit" className="btn-danger" disabled={deleting || deletePassword.length === 0}>
+                  {deleting ? 'Устгаж байна…' : 'Тийм, устгая'}
+                </button>
+                <button
+                  type="button"
+                  className="btn-ghost"
+                  disabled={deleting}
+                  onClick={() => {
+                    setShowDelete(false);
+                    setDeletePassword('');
+                    setDeleteError('');
+                  }}
+                >
+                  Цуцлах
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
       </div>
       {lightbox && user.avatar && <Lightbox src={user.avatar} alt={user.name} onClose={() => setLightbox(false)} />}
     </div>
