@@ -988,6 +988,51 @@ img.avatar {
   vertical-align: middle;
 }
 
+/* Бандуулсан хэрэглэгчид харуулах мэдэгдэл */
+.ban-notice {
+  text-align: center;
+  padding: 18px 12px;
+  background: rgba(248, 113, 113, 0.1);
+  border: 1px solid rgba(248, 113, 113, 0.5);
+  border-radius: 16px;
+  margin-bottom: 12px;
+}
+
+.ban-notice-icon {
+  font-size: 2.5rem;
+  line-height: 1;
+  margin-bottom: 8px;
+}
+
+.ban-notice h2 {
+  margin: 0 0 8px;
+  font-size: 1.25rem;
+}
+
+.ban-notice p {
+  margin: 4px 0;
+}
+
+/* Бангийн хугацаа сонгогч (гишүүний мөр доторх) + бангийн түүхийн мөр */
+.ban-chooser {
+  display: inline-flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.ban-log-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  background: var(--card2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
 .user-username {
   color: var(--muted);
   font-size: 0.85rem;
