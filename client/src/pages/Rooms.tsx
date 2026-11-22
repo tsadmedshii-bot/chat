@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ChatMessage, Room, User } from '../../../shared/src/types';
 import { ApiError, deleteMessage, listMessages, myPrivateAccess, requestPrivateAccess, sendMessage } from '../api';
 import EmojiPicker from '../components/EmojiPicker';
-import UserName from '../components/UserBadge';
+import UserName, { Avatar } from '../components/UserBadge';
 
 const ROOMS: { id: Room; label: string; desc: string }[] = [
   { id: 'public', label: '🌍 Нийтийн өрөө', desc: 'Хүн бүрд нээлттэй' },
@@ -18,6 +18,8 @@ export default function Rooms({ user }: { user: User }) {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const firstLoadRef = useRef(true);
 
   const load = useCallback(async (r: Room) => {
     setError('');
@@ -43,8 +45,23 @@ export default function Rooms({ user }: { user: User }) {
     void load(room);
   }, [room, load]);
 
+  // Мессежийг 10 секунд тутамд шинэчилнэ — онлайн цэг, шинэ мессеж шинэчлэгдэнэ.
+  // Зөвшөөрөлгүй өрөөнд ч load() нь зөвшөөрлийг дахин шалгана (админ зөвшөөрвөл автоматаар нээгдэнэ).
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const t = window.setInterval(() => {
+      void load(room);
+    }, 10000);
+    return () => window.clearInterval(t);
+  }, [room, load]);
+
+  // Шинэ мессеж ирэхэд зөвхөн доод талд нь байвал автоматаар гүйлгэнэ —
+  // хэрэглэгч дээш гүйлгэж уншиж байхад нь тасалдуулахгүй.
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el) return;
+    const nearBottom = firstLoadRef.current || el.scrollHeight - el.scrollTop - el.clientHeight < 150;
+    firstLoadRef.current = false;
+    if (nearBottom) bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
   const canDelete = (m: ChatMessage): boolean =>
@@ -133,11 +150,11 @@ export default function Rooms({ user }: { user: User }) {
         </div>
       ) : (
         <>
-          <div className="message-list">
+          <div className="message-list" ref={listRef}>
             {messages.length === 0 && <p className="empty">Одоохондоо мессеж алга — хамгийн түрүүнд та бичээрэй! ✨</p>}
             {messages.map((m) => (
               <div key={m.id} className={m.author.id === user.id ? 'message mine' : 'message'}>
-                <span className="avatar">{m.author.name.slice(0, 1).toUpperCase()}</span>
+                <Avatar user={m.author} showDot />
                 <div className="message-body">
                   <UserName user={m.author} />
                   <p>{m.content}</p>
