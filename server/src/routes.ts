@@ -1,12 +1,12 @@
 // Чат — /api чиглүүлэгч (бүх endpoint энд).
 import { Router } from 'express';
 import type { NextFunction, Request, Response } from 'express';
-import { and, asc, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, or } from 'drizzle-orm';
 import { db } from './db';
-import { messages, postComments, postLikes, posts, roomAccess, users } from './schema';
+import { directMessages, dmReads, messages, postComments, postLikes, posts, roomAccess, users } from './schema';
 import type { AuthUser } from './auth';
 import { createSession, deleteSession, HttpError, registerUser, requireAdmin, requireAuth, verifyPassword } from './auth';
-import type { AccessRequest, AccessStatus, ChatMessage, MemberRow, Post, PostComment, Role, Room, User } from '../../shared/src/types';
+import type { AccessRequest, AccessStatus, ChatMessage, DirectConversation, DirectMessage, MemberRow, Post, PostComment, Role, Room, User } from '../../shared/src/types';
 
 export const router = Router();
 
@@ -14,8 +14,25 @@ function toIso(d: Date): string {
   return d.toISOString();
 }
 
-function publicUser(row: { id: number; name: string; username: string; role: string; banned: boolean; canBan: boolean; createdAt: Date }): User {
-  return { id: row.id, name: row.name, username: row.username, role: row.role as Role, banned: row.banned, canBan: row.canBan, createdAt: toIso(row.createdAt) };
+/** Сүүлийн 90 секундэд идэвхтэй байсан хэрэглэгчийг онлайн гэж тооцно. */
+const ONLINE_WINDOW_MS = 90_000;
+
+function isOnline(lastSeenAt: Date | null): boolean {
+  if (!lastSeenAt) return false;
+  return Date.now() - lastSeenAt.getTime() <= ONLINE_WINDOW_MS;
+}
+
+function publicUser(row: { id: number; name: string; username: string; role: string; banned: boolean; canBan: boolean; avatar: string | null; lastSeenAt: Date | null; createdAt: Date }): User {
+  return { id: row.id, name: row.name, username: row.username, role: row.role as Role, banned: row.banned, canBan: row.canBan, avatar: row.avatar ?? null, lastSeenAt: row.lastSeenAt ? toIso(row.lastSeenAt) : null, online: isOnline(row.lastSeenAt), createdAt: toIso(row.createdAt) };
+}
+
+/** Устгагдсан хэрэглэгчийн оронд харуулдаг орлуулагч. */
+function deletedUser(authorId: number, createdAt: Date): User {
+  return { id: authorId, name: 'Устгасан хэрэглэгч', username: '', role: 'member' as Role, banned: false, canBan: false, avatar: null, lastSeenAt: null, online: false, createdAt: toIso(createdAt) };
+}
+
+function toDirectMessage(row: { id: number; senderId: number; recipientId: number; content: string; createdAt: Date }): DirectMessage {
+  return { id: row.id, senderId: row.senderId, recipientId: row.recipientId, content: row.content, createdAt: toIso(row.createdAt) };
 }
 
 /** Том админ болон жижиг админ зөвшөөрөлтэй өрөөнд автоматаар орно. */
@@ -47,8 +64,8 @@ function ah(fn: AsyncHandler) {
   };
 }
 
-function parseId(req: Request, label = 'Бичлэг олдсонгүй'): number {
-  const id = Number(req.params.id);
+function parseId(req: Request, label = 'Бичлэг олдсонгүй', param = 'id'): number {
+  const id = Number(req.params[param]);
   if (!Number.isInteger(id) || id < 1) throw new HttpError(404, label);
   return id;
 }
@@ -68,7 +85,7 @@ router.post(
     const user: AuthUser = await registerUser(String(name ?? ''), String(username ?? ''), String(password ?? ''));
     const token = await createSession(user.id);
     res.status(201).json({
-      user: { id: user.id, name: user.name, username: user.username, role: user.role, banned: user.banned, canBan: user.canBan, createdAt: toIso(user.createdAt) },
+      user: publicUser(user),
       token,
     });
   }),
@@ -94,14 +111,16 @@ router.post(
       return;
     }
     const token = await createSession(row.id);
-    res.json({ user: publicUser(row), token });
+    const now = new Date();
+    await db.update(users).set({ lastSeenAt: now }).where(eq(users.id, row.id));
+    res.json({ user: publicUser({ ...row, lastSeenAt: now }), token });
   }),
 );
 
 router.get('/auth/me', requireAuth, (req, res) => {
   const u = req.user as AuthUser;
   res.json({
-    user: { id: u.id, name: u.name, username: u.username, role: u.role, banned: u.banned, canBan: u.canBan, createdAt: toIso(u.createdAt) },
+    user: publicUser(u),
   });
 });
 
@@ -112,6 +131,63 @@ router.post(
     const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
     if (token) await deleteSession(token);
     res.status(204).send();
+  }),
+);
+
+// ---------------------------------------------------------------- онлайн/офлайн төлөв
+
+/** Клиент 30 секунд тутамд дуудна — сүүлд идэвхтэй байсан цагийг шинэчилнэ. */
+router.post(
+  '/presence/heartbeat',
+  requireAuth,
+  ah(async (req, res) => {
+    const u = req.user as AuthUser;
+    await db.update(users).set({ lastSeenAt: new Date() }).where(eq(users.id, u.id));
+    res.json({ ok: true });
+  }),
+);
+
+// ---------------------------------------------------------------- профайл зураг
+
+const MAX_AVATAR_LENGTH = 500 * 1024;
+const AVATAR_PREFIXES = ['data:image/jpeg;base64,', 'data:image/png;base64,', 'data:image/webp;base64,'];
+
+function validateAvatar(value: unknown): string {
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new HttpError(400, 'Зураг сонгоно уу');
+  }
+  if (value.length > MAX_AVATAR_LENGTH) {
+    throw new HttpError(400, 'Зураг хэт том байна — 500 KB-аас бага зураг сонгоно уу');
+  }
+  const prefix = AVATAR_PREFIXES.find((p) => value.startsWith(p));
+  if (!prefix) {
+    throw new HttpError(400, 'Зөвхөн JPEG, PNG эсвэл WebP зураг оруулж болно');
+  }
+  const payload = value.slice(prefix.length);
+  if (!/^[A-Za-z0-9+/=]+$/.test(payload)) {
+    throw new HttpError(400, 'Зургийн мэдээлэл буруу байна');
+  }
+  return value;
+}
+
+router.post(
+  '/me/avatar',
+  requireAuth,
+  ah(async (req, res) => {
+    const u = req.user as AuthUser;
+    const avatar = validateAvatar(req.body?.avatar);
+    const updated = await db.update(users).set({ avatar }).where(eq(users.id, u.id)).returning();
+    res.json({ user: publicUser(updated[0]) });
+  }),
+);
+
+router.delete(
+  '/me/avatar',
+  requireAuth,
+  ah(async (req, res) => {
+    const u = req.user as AuthUser;
+    const updated = await db.update(users).set({ avatar: null }).where(eq(users.id, u.id)).returning();
+    res.json({ user: publicUser(updated[0]) });
   }),
 );
 
@@ -144,7 +220,7 @@ async function listPosts(meId: number): Promise<Post[]> {
     const likes = likesByPost.get(p.id) ?? { count: 0, mine: false };
     return {
       id: p.id,
-      author: author ?? { id: p.authorId, name: 'Устгасан хэрэглэгч', username: '', role: 'member' as Role, banned: false, canBan: false, createdAt: toIso(p.createdAt) },
+      author: author ?? deletedUser(p.authorId, p.createdAt),
       content: p.content,
       likeCount: likes.count,
       likedByMe: likes.mine,
@@ -267,7 +343,7 @@ async function listMessages(room: Room): Promise<ChatMessage[]> {
   return rows.map((m) => ({
     id: m.id,
     room: m.room as Room,
-    author: userById.get(m.authorId) ?? { id: m.authorId, name: 'Устгасан хэрэглэгч', username: '', role: 'member' as Role, banned: false, canBan: false, createdAt: toIso(m.createdAt) },
+    author: userById.get(m.authorId) ?? deletedUser(m.authorId, m.createdAt),
     content: m.content,
     createdAt: toIso(m.createdAt),
   }));
@@ -325,6 +401,127 @@ router.delete(
       throw new HttpError(403, 'Энэ мессежийг зөвхөн зохиогч, том админ эсвэл жижиг админ устгаж болно');
     }
     await db.delete(messages).where(eq(messages.id, id));
+    res.status(204).send();
+  }),
+);
+
+// ---------------------------------------------------------------- хувь чат (1:1)
+// Бандуулсан хэрэглэгчийг requireAuth аль хэдийн хаасан тул DM ч хаагдсан байна.
+// '/dm/conversations' замыг '/dm/:userId'-ээс ӨМНӨ бүртгэнэ —
+// эс бөгөөс 'conversations' нь userId параметр гэж танигдана.
+
+router.get(
+  '/dm/conversations',
+  requireAuth,
+  ah(async (req, res) => {
+    const u = req.user as AuthUser;
+    const userRows = await db.select().from(users).orderBy(asc(users.name));
+    const dmRows = await db
+      .select()
+      .from(directMessages)
+      .where(or(eq(directMessages.senderId, u.id), eq(directMessages.recipientId, u.id)))
+      .orderBy(desc(directMessages.createdAt));
+    const readRows = await db.select().from(dmReads).where(eq(dmReads.userId, u.id));
+    const lastReadByPartner = new Map(readRows.map((r) => [r.partnerId, r.lastReadAt]));
+
+    const conversations: DirectConversation[] = userRows
+      .filter((row) => row.id !== u.id)
+      .map((row) => {
+        const mine = dmRows.filter(
+          (m) =>
+            (m.senderId === u.id && m.recipientId === row.id) ||
+            (m.senderId === row.id && m.recipientId === u.id),
+        );
+        const last = mine[0];
+        const lastRead = lastReadByPartner.get(row.id);
+        const unreadCount = mine.filter(
+          (m) => m.senderId === row.id && (!lastRead || m.createdAt.getTime() > lastRead.getTime()),
+        ).length;
+        return {
+          user: publicUser(row),
+          lastMessage: last
+            ? { content: last.content, createdAt: toIso(last.createdAt), senderId: last.senderId }
+            : null,
+          unreadCount,
+        };
+      });
+
+    conversations.sort((a, b) => {
+      const at = a.lastMessage?.createdAt;
+      const bt = b.lastMessage?.createdAt;
+      if (at && bt) return bt.localeCompare(at);
+      if (at) return -1;
+      if (bt) return 1;
+      return a.user.name.localeCompare(b.user.name, 'mn');
+    });
+    res.json({ conversations });
+  }),
+);
+
+router.get(
+  '/dm/:userId',
+  requireAuth,
+  ah(async (req, res) => {
+    const u = req.user as AuthUser;
+    const partnerId = parseId(req, 'Хэрэглэгч олдсонгүй', 'userId');
+    const partnerRows = await db.select({ id: users.id }).from(users).where(eq(users.id, partnerId)).limit(1);
+    if (!partnerRows[0]) throw new HttpError(404, 'Хэрэглэгч олдсонгүй');
+    const rows = await db
+      .select()
+      .from(directMessages)
+      .where(
+        or(
+          and(eq(directMessages.senderId, u.id), eq(directMessages.recipientId, partnerId)),
+          and(eq(directMessages.senderId, partnerId), eq(directMessages.recipientId, u.id)),
+        ),
+      )
+      .orderBy(asc(directMessages.createdAt))
+      .limit(200);
+    // Уншсан гэж тэмдэглэнэ.
+    const now = new Date();
+    await db
+      .insert(dmReads)
+      .values({ userId: u.id, partnerId, lastReadAt: now })
+      .onConflictDoUpdate({ target: [dmReads.userId, dmReads.partnerId], set: { lastReadAt: now } });
+    res.json({ messages: rows.map(toDirectMessage) });
+  }),
+);
+
+router.post(
+  '/dm/:userId',
+  requireAuth,
+  ah(async (req, res) => {
+    const u = req.user as AuthUser;
+    const partnerId = parseId(req, 'Хэрэглэгч олдсонгүй', 'userId');
+    if (partnerId === u.id) {
+      throw new HttpError(400, 'Өөртөө хувь чат бичиж болохгүй');
+    }
+    const content = String(req.body?.content ?? '').trim();
+    if (content.length < 1 || content.length > 2000) {
+      throw new HttpError(400, 'Мессеж 1–2000 тэмдэгт байх ёстой');
+    }
+    const partnerRows = await db.select({ id: users.id }).from(users).where(eq(users.id, partnerId)).limit(1);
+    if (!partnerRows[0]) throw new HttpError(404, 'Хэрэглэгч олдсонгүй');
+    const inserted = await db
+      .insert(directMessages)
+      .values({ senderId: u.id, recipientId: partnerId, content })
+      .returning();
+    res.status(201).json({ message: toDirectMessage(inserted[0]) });
+  }),
+);
+
+router.delete(
+  '/dm/:id',
+  requireAuth,
+  ah(async (req, res) => {
+    const u = req.user as AuthUser;
+    const id = parseId(req, 'Мессеж олдсонгүй');
+    const rows = await db.select().from(directMessages).where(eq(directMessages.id, id)).limit(1);
+    if (!rows[0]) throw new HttpError(404, 'Мессеж олдсонгүй');
+    if (!canDelete(u, rows[0].senderId)) {
+      throw new HttpError(403, 'Энэ мессежийг зөвхөн зохиогч, том админ эсвэл жижиг админ устгаж болно');
+    }
+    await db.delete(directMessages).where(eq(directMessages.id, id));
     res.status(204).send();
   }),
 );
