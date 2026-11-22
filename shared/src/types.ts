@@ -12,6 +12,12 @@ export interface User {
   banned: boolean;
   /** Жижиг админд бандах эрх олгосон эсэх (зөвхөн moderator-д хамаарна). */
   canBan: boolean;
+  /** Профайл зураг (data URL) — байхгүй бол null. */
+  avatar: string | null;
+  /** Сүүлд идэвхтэй байсан цаг (ISO) — хэзээ ч идэвхжээгүй бол null. */
+  lastSeenAt: string | null;
+  /** Сүүлийн 90 секундэд идэвхтэй байсан эсэх. */
+  online: boolean;
   createdAt: string;
 }
 
@@ -56,4 +62,20 @@ export interface MemberRow {
   user: User;
   /** Зөвшөөрөлтэй өрөөнд нэвтрэх эрх: админ/жижиг админ автоматаар 'approved'. */
   privateAccess: AccessStatus | 'auto' | 'none';
+}
+
+/** Хувь чат (1:1) мессеж. */
+export interface DirectMessage {
+  id: number;
+  senderId: number;
+  recipientId: number;
+  content: string;
+  createdAt: string;
+}
+
+/** Хувь чатын жагсаалтын нэг мөр — ярилцагч + сүүлийн мессеж + уншаагүй тоо. */
+export interface DirectConversation {
+  user: User;
+  lastMessage: { content: string; createdAt: string; senderId: number } | null;
+  unreadCount: number;
 }
