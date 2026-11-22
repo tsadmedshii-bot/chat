@@ -191,6 +191,20 @@ router.delete(
   }),
 );
 
+// ---------------------------------------------------------------- хэрэглэгчийн профайл
+
+router.get(
+  '/users/:id',
+  requireAuth,
+  ah(async (req, res) => {
+    const id = parseId(req, 'Хэрэглэгч олдсонгүй');
+    const rows = await db.select().from(users).where(eq(users.id, id)).limit(1);
+    if (!rows[0]) throw new HttpError(404, 'Хэрэглэгч олдсонгүй');
+    const postRows = await db.select({ id: posts.id }).from(posts).where(eq(posts.authorId, id));
+    res.json({ user: publicUser(rows[0]), postCount: postRows.length });
+  }),
+);
+
 // ---------------------------------------------------------------- пост (нүүр)
 
 async function listPosts(meId: number): Promise<Post[]> {
