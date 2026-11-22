@@ -7,13 +7,39 @@ import { db } from './db';
 import { sessions, users } from './schema';
 import type { Role } from '../../shared/src/types';
 
+/** Хэрэглэгч бантай эсэх — байнга бан (banned) ЭСВЭЛ хугацаа нь дуусаагүй
+    хугацаатай бан (bannedUntil ирээдүйд) байгаа үед true. Хугацаа нь
+    өнгөрсөн бан нь бан гэж тооцогдохгүй (цэвэрлэгээний ажил баганыг арилгана). */
+export function isBannedNow(banned: boolean, bannedUntil: Date | null): boolean {
+  if (banned) return true;
+  return bannedUntil !== null && bannedUntil.getTime() > Date.now();
+}
+
+/** Бандуулсан хэрэглэгчид харуулах мессеж — хугацааг Монгол цагаар бичнэ. */
+export function banMessage(bannedUntil: Date | null): string {
+  if (bannedUntil) {
+    const when = bannedUntil.toLocaleString('mn-MN', {
+      timeZone: 'Asia/Ulaanbaatar',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+    return `Та ${when} хүртэл бантай байна. Том админтай холбогдоно уу`;
+  }
+  return 'Та байнга бантай байна. Том админтай холбогдоно уу';
+}
+
 /** req.user-д хавсаргадаг нэвтэрсэн хэрэглэгчийн мэдээлэл (нууц үггүй). */
 export interface AuthUser {
   id: number;
   name: string;
   username: string;
   role: Role;
+  /** Байнга бандуулсан эсэх. */
   banned: boolean;
+  /** Хугацаатай бан дуусах цаг — байхгүй бол null. */
+  bannedUntil: Date | null;
   canBan: boolean;
   avatar: string | null;
   lastSeenAt: Date | null;
@@ -60,6 +86,7 @@ async function loadUserByToken(token: string): Promise<AuthUser | null> {
       username: users.username,
       role: users.role,
       banned: users.banned,
+      bannedUntil: users.bannedUntil,
       canBan: users.canBan,
       avatar: users.avatar,
       lastSeenAt: users.lastSeenAt,
@@ -86,9 +113,14 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     res.status(401).json({ error: 'Сесс хүчингүй болсон байна. Дахин нэвтэрнэ үү' });
     return;
   }
-  if (user.banned) {
+  if (isBannedNow(user.banned, user.bannedUntil)) {
     // Бандуулсан хэрэглэгчийн хуучин сесс ч хүчингүй болно.
-    res.status(401).json({ error: 'Таны хаяг бандуулсан байна' });
+    // Клиент бандуулсан гэдгийг таньж, бангийн мэдэгдэл харуулна.
+    res.status(401).json({
+      error: banMessage(user.bannedUntil),
+      banned: true,
+      bannedUntil: user.bannedUntil ? user.bannedUntil.toISOString() : null,
+    });
     return;
   }
   req.user = user;
@@ -160,7 +192,7 @@ export async function registerUser(
   const inserted = await db
     .insert(users)
     .values({ name: cleanName, username: cleanUsername, passwordHash, role, lastSeenAt: now })
-    .returning({ id: users.id, name: users.name, username: users.username, role: users.role, banned: users.banned, canBan: users.canBan, avatar: users.avatar, lastSeenAt: users.lastSeenAt, createdAt: users.createdAt });
+    .returning({ id: users.id, name: users.name, username: users.username, role: users.role, banned: users.banned, bannedUntil: users.bannedUntil, canBan: users.canBan, avatar: users.avatar, lastSeenAt: users.lastSeenAt, createdAt: users.createdAt });
   const row = inserted[0];
   return { ...row, role: row.role as Role };
 }
