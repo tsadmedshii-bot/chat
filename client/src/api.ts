@@ -1,5 +1,5 @@
 // Чат — API клиент (same-origin; Vite dev нь /api-г localhost:3001 рүү proxy хийдэг).
-import type { AccessRequest, AccessStatus, ChatMessage, MemberRow, Post, PostComment, Room, User } from '../../shared/src/types';
+import type { AccessRequest, AccessStatus, ChatMessage, DirectConversation, DirectMessage, MemberRow, Post, PostComment, Room, User } from '../../shared/src/types';
 
 const TOKEN_KEY = 'chat_token';
 
@@ -198,4 +198,41 @@ export async function adminGrantBanPermission(userId: number): Promise<User> {
 export async function adminRevokeBanPermission(userId: number): Promise<User> {
   const data = await api<User | { user: User }>(`/api/admin/users/${userId}/revoke-ban-permission`, { method: 'POST' });
   return unwrapOne(data);
+}
+
+// ---------------------------------------------------------------- онлайн/офлайн + профайл зураг
+
+export async function heartbeat(): Promise<void> {
+  await api<{ ok: boolean }>('/api/presence/heartbeat', { method: 'POST' });
+}
+
+export async function uploadAvatar(avatar: string): Promise<User> {
+  const data = await api<User | { user: User }>('/api/me/avatar', jsonBody({ avatar }));
+  return unwrapOne(data);
+}
+
+export async function removeAvatar(): Promise<User> {
+  const data = await api<User | { user: User }>('/api/me/avatar', { method: 'DELETE' });
+  return unwrapOne(data);
+}
+
+// ---------------------------------------------------------------- хувь чат (1:1)
+
+export async function listDmConversations(): Promise<DirectConversation[]> {
+  const data = await api<DirectConversation[] | { conversations: DirectConversation[] }>('/api/dm/conversations');
+  return unwrapList(data);
+}
+
+export async function listDmMessages(userId: number): Promise<DirectMessage[]> {
+  const data = await api<DirectMessage[] | { messages: DirectMessage[] }>(`/api/dm/${userId}`);
+  return unwrapList(data);
+}
+
+export async function sendDm(userId: number, content: string): Promise<DirectMessage> {
+  const data = await api<DirectMessage | { message: DirectMessage }>(`/api/dm/${userId}`, jsonBody({ content }));
+  return unwrapOne(data);
+}
+
+export async function deleteDm(messageId: number): Promise<void> {
+  await api<void>(`/api/dm/${messageId}`, { method: 'DELETE' });
 }
