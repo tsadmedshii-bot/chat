@@ -1,18 +1,22 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { User } from '../../shared/src/types';
-import { logout, me } from './api';
+import { heartbeat, logout, me } from './api';
 import Home from './pages/Home';
 import Auth from './pages/Auth';
 import Rooms from './pages/Rooms';
 import Members from './pages/Members';
-import { RoleBadge } from './components/UserBadge';
+import Direct from './pages/Direct';
+import Profile from './pages/Profile';
+import { Avatar, RoleBadge } from './components/UserBadge';
 
-type View = 'home' | 'rooms' | 'members';
+type View = 'home' | 'rooms' | 'direct' | 'members' | 'profile';
 
 export default function App() {
   const [view, setView] = useState<View>('home');
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  /** Гишүүдийн жагсаалтаас «💬 Чат» дарсан хэрэглэгч — DM хуудас нээнэ. */
+  const [dmPartnerId, setDmPartnerId] = useState<number | null>(null);
 
   useEffect(() => {
     me()
@@ -23,6 +27,20 @@ export default function App() {
       .finally(() => setLoading(false));
   }, []);
 
+  // Онлайн төлөв: 30 секунд тутамд heartbeat илгээнэ.
+  useEffect(() => {
+    if (!user) return;
+    void heartbeat().catch(() => {
+      // Heartbeat бүтэлгүйтвэл чимээгүй өнгөрнө.
+    });
+    const t = window.setInterval(() => {
+      void heartbeat().catch(() => {
+        // Heartbeat бүтэлгүйтвэл чимээгүй өнгөрнө.
+      });
+    }, 30000);
+    return () => window.clearInterval(t);
+  }, [user]);
+
   const handleAuthDone = useCallback((u: User) => {
     setUser(u);
     setView('home');
@@ -32,6 +50,12 @@ export default function App() {
     logout();
     setUser(null);
     setView('home');
+    setDmPartnerId(null);
+  }
+
+  function openDm(partnerId: number) {
+    setDmPartnerId(partnerId);
+    setView('direct');
   }
 
   if (loading) {
@@ -59,13 +83,20 @@ export default function App() {
             <button type="button" className={view === 'rooms' ? 'active' : ''} onClick={() => setView('rooms')}>
               💬 Өрөөнүүд
             </button>
+            <button type="button" className={view === 'direct' ? 'active' : ''} onClick={() => setView('direct')}>
+              💬 Хувь чат
+            </button>
             {isAdmin && (
               <button type="button" className={view === 'members' ? 'active' : ''} onClick={() => setView('members')}>
                 👑 Гишүүд
               </button>
             )}
+            <button type="button" className={view === 'profile' ? 'active' : ''} onClick={() => setView('profile')}>
+              👤 Профайл
+            </button>
           </nav>
           <div className="header-user">
+            <Avatar user={user} size="small" showDot />
             <span className="header-user-badge">
               <RoleBadge role={user.role} />
               <span>{user.name}</span>
@@ -79,7 +110,11 @@ export default function App() {
       <main className="container main-content">
         {view === 'home' && <Home user={user} />}
         {view === 'rooms' && <Rooms user={user} />}
-        {view === 'members' && <Members user={user} />}
+        {view === 'direct' && (
+          <Direct user={user} initialPartnerId={dmPartnerId} onPartnerOpened={() => setDmPartnerId(null)} />
+        )}
+        {view === 'members' && <Members user={user} onOpenDm={openDm} />}
+        {view === 'profile' && <Profile user={user} onUserChange={setUser} />}
       </main>
       <footer className="site-footer">
         <div className="container">
