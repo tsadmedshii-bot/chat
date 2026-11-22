@@ -120,7 +120,7 @@ export default function App() {
           />
         )}
         {view === 'members' && <Members user={user} onOpenDm={openDm} onViewProfile={setProfileUserId} />}
-        {view === 'profile' && <Profile user={user} onUserChange={setUser} />}
+        {view === 'profile' && <Profile user={user} onUserChange={setUser} onAccountDeleted={handleLogout} />}
       </main>
       {profileUserId !== null && (
         <ProfileModal userId={profileUserId} meId={user.id} onClose={() => setProfileUserId(null)} onOpenDm={openDm} />
