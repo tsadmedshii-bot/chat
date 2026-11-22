@@ -13,7 +13,7 @@ import {
   adminRevokeModerator,
   adminUnbanUser,
 } from '../api';
-import UserName from '../components/UserBadge';
+import UserName, { Avatar } from '../components/UserBadge';
 
 function accessLabel(row: MemberRow): string {
   if (row.privateAccess === 'auto') return 'Автомат (админ)';
@@ -23,7 +23,7 @@ function accessLabel(row: MemberRow): string {
   return 'Хүсэлтгүй';
 }
 
-export default function Members({ user }: { user: User }) {
+export default function Members({ user, onOpenDm }: { user: User; onOpenDm: (userId: number) => void }) {
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [requests, setRequests] = useState<AccessRequest[]>([]);
   const [error, setError] = useState('');
@@ -52,6 +52,14 @@ export default function Members({ user }: { user: User }) {
 
   useEffect(() => {
     void refresh();
+  }, [refresh]);
+
+  // Гишүүдийн жагсаалтыг 30 секунд тутамд шинэчилнэ — онлайн цэг шинэчлэгдэнэ.
+  useEffect(() => {
+    const t = window.setInterval(() => {
+      void refresh();
+    }, 30000);
+    return () => window.clearInterval(t);
   }, [refresh]);
 
   if (!canView) {
@@ -162,7 +170,7 @@ export default function Members({ user }: { user: User }) {
           ) : (
             requests.map((r) => (
               <div key={r.id} className="member-row">
-                <UserName user={r.user} />
+                <UserName user={r.user} showOnline />
                 <div className="member-actions">
                   <button type="button" className="btn-primary small" onClick={() => void decide(r.id, true)}>
                     Зөвшөөрөх
@@ -180,9 +188,13 @@ export default function Members({ user }: { user: User }) {
       <h3>👥 Бүх гишүүд ({members.length})</h3>
       {members.map((row) => (
         <div key={row.user.id} className="member-row">
+          <Avatar user={row.user} showDot />
           <div>
             <UserName user={row.user} />
             {row.user.banned && <span className="banned-badge">🚫 Бандуулсан</span>}
+            <div className="muted small">
+              {row.user.online ? '🟢 Онлайн — одоо байна' : '⚪ Офлайн'}
+            </div>
             <div className="muted small">Зөвшөөрөлтэй өрөө: {accessLabel(row)}</div>
             {row.user.role === 'moderator' && (
               <div className="muted small">
@@ -191,6 +203,11 @@ export default function Members({ user }: { user: User }) {
             )}
           </div>
           <div className="member-actions">
+            {row.user.id !== user.id && (
+              <button type="button" className="btn-ghost small" onClick={() => onOpenDm(row.user.id)}>
+                💬 Чат
+              </button>
+            )}
             {isAdmin && row.user.role === 'member' && (
               <button type="button" className="btn-ghost small" onClick={() => void grant(row.user.id)}>
                 ⚔️🛡️ Жижиг админ болгох
