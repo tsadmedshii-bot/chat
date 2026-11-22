@@ -1,5 +1,5 @@
 // Чат — API клиент (same-origin; Vite dev нь /api-г localhost:3001 рүү proxy хийдэг).
-import type { AccessRequest, AccessStatus, ChatMessage, DirectConversation, DirectMessage, MemberRow, Post, PostComment, Room, User, UserProfile } from '../../shared/src/types';
+import type { AccessRequest, AccessStatus, BanLog, ChatMessage, DirectConversation, DirectMessage, MemberRow, Post, PostComment, Room, User, UserProfile } from '../../shared/src/types';
 
 const TOKEN_KEY = 'chat_token';
 
@@ -15,15 +15,27 @@ function saveToken(token: string | null): void {
   }
 }
 
-/** Серверийн алдаа: Mongolian { error } мессеж + HTTP статус. */
+/** Серверийн алдаа: Mongolian { error } мессеж + HTTP статус.
+    Бандуулсан үед banned=true, bannedUntil (ISO эсвэл null) дамжина. */
 export class ApiError extends Error {
   status: number;
+  banned?: boolean;
+  bannedUntil?: string | null;
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, banned?: boolean, bannedUntil?: string | null) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
+    this.banned = banned;
+    this.bannedUntil = bannedUntil;
   }
+}
+
+/** Бангийн тухай мэдээллийн үйл явдал — App сонсож, дэлгэц дүүрэн мэдэгдэл харуулна. */
+export const BAN_EVENT = 'chat:banned';
+
+export function dispatchBanEvent(bannedUntil: string | null): void {
+  window.dispatchEvent(new CustomEvent(BAN_EVENT, { detail: { bannedUntil } }));
 }
 
 export async function api<T>(path: string, opts: RequestInit = {}): Promise<T> {
@@ -40,15 +52,27 @@ export async function api<T>(path: string, opts: RequestInit = {}): Promise<T> {
   const res = await fetch(path, { ...opts, headers });
   if (!res.ok) {
     let message = 'Алдаа гарлаа. Дахин оролдоно уу.';
+    let banned: boolean | undefined;
+    let bannedUntil: string | null | undefined;
     try {
       const data: unknown = await res.json();
       if (data && typeof data === 'object' && 'error' in data && typeof (data as { error: unknown }).error === 'string') {
         message = (data as { error: string }).error;
       }
+      if (data && typeof data === 'object' && (data as { banned?: unknown }).banned === true) {
+        banned = true;
+        const until = (data as { bannedUntil?: unknown }).bannedUntil;
+        bannedUntil = typeof until === 'string' ? until : null;
+        // Нэвтрэх үед бандуулсан бол нэвтрэх хуудас өөрөө мэдэгдэл харуулна —
+        // бусад хүсэлт дээр бандуулсан гэдгийг апп даяар мэдэгдэнэ.
+        if (!path.startsWith('/api/auth/login')) {
+          dispatchBanEvent(bannedUntil);
+        }
+      }
     } catch {
       // JSON биш алдааны хариулт — анхдагч мессежийг хэрэглэнэ.
     }
-    throw new ApiError(message, res.status);
+    throw new ApiError(message, res.status, banned, bannedUntil);
   }
   if (res.status === 204) {
     return undefined as T;
@@ -180,14 +204,24 @@ export async function adminRevokeModerator(userId: number): Promise<User> {
   return unwrapOne(data);
 }
 
-export async function adminBanUser(userId: number): Promise<User> {
-  const data = await api<User | { user: User }>(`/api/admin/users/${userId}/ban`, { method: 'POST' });
+/** Хугацаатай бандах — durationMinutes: 5, 15, 30, 1440, эсвэл null = Байнга. */
+export async function adminBanUser(userId: number, durationMinutes?: number | null): Promise<User> {
+  const data = await api<User | { user: User }>(
+    `/api/admin/users/${userId}/ban`,
+    jsonBody({ durationMinutes: durationMinutes ?? null }),
+  );
   return unwrapOne(data);
 }
 
 export async function adminUnbanUser(userId: number): Promise<User> {
   const data = await api<User | { user: User }>(`/api/admin/users/${userId}/unban`, { method: 'POST' });
   return unwrapOne(data);
+}
+
+/** Бангийн түүх — зөвхөн том админ. */
+export async function getBanLogs(): Promise<BanLog[]> {
+  const data = await api<BanLog[] | { logs: BanLog[] }>('/api/admin/ban-logs');
+  return unwrapList(data);
 }
 
 export async function adminGrantBanPermission(userId: number): Promise<User> {
