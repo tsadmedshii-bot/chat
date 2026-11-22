@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { User } from '../../../shared/src/types';
 import { ApiError, login, register } from '../api';
+import InstallApp from '../components/InstallApp';
 
 export default function Auth({ onDone }: { onDone: (user: User) => void }) {
   const [mode, setMode] = useState<'login' | 'register'>('register');
@@ -65,6 +66,7 @@ export default function Auth({ onDone }: { onDone: (user: User) => void }) {
             {busy ? 'Түр хүлээнэ үү…' : mode === 'register' ? 'Бүртгүүлэх' : 'Нэвтрэх'}
           </button>
         </form>
+        <InstallApp />
       </div>
     </div>
   );
