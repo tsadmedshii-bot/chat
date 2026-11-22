@@ -15,6 +15,8 @@ export interface AuthUser {
   role: Role;
   banned: boolean;
   canBan: boolean;
+  avatar: string | null;
+  lastSeenAt: Date | null;
   createdAt: Date;
 }
 
@@ -59,6 +61,8 @@ async function loadUserByToken(token: string): Promise<AuthUser | null> {
       role: users.role,
       banned: users.banned,
       canBan: users.canBan,
+      avatar: users.avatar,
+      lastSeenAt: users.lastSeenAt,
       createdAt: users.createdAt,
     })
     .from(sessions)
@@ -152,10 +156,11 @@ export async function registerUser(
   const role: Role = all.length === 0 ? 'admin' : 'member';
 
   const passwordHash = await hashPassword(password);
+  const now = new Date();
   const inserted = await db
     .insert(users)
-    .values({ name: cleanName, username: cleanUsername, passwordHash, role })
-    .returning({ id: users.id, name: users.name, username: users.username, role: users.role, banned: users.banned, canBan: users.canBan, createdAt: users.createdAt });
+    .values({ name: cleanName, username: cleanUsername, passwordHash, role, lastSeenAt: now })
+    .returning({ id: users.id, name: users.name, username: users.username, role: users.role, banned: users.banned, canBan: users.canBan, avatar: users.avatar, lastSeenAt: users.lastSeenAt, createdAt: users.createdAt });
   const row = inserted[0];
   return { ...row, role: row.role as Role };
 }
