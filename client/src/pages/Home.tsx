@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { Post, User } from '../../../shared/src/types';
 import { ApiError, addComment, createPost, deletePost, listPosts, toggleLike } from '../api';
 import EmojiPicker from '../components/EmojiPicker';
-import UserName from '../components/UserBadge';
+import UserName, { Avatar } from '../components/UserBadge';
 
 function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -32,6 +32,14 @@ export default function Home({ user }: { user: User }) {
 
   useEffect(() => {
     void refresh();
+  }, [refresh]);
+
+  // Постыг 30 секунд тутамд шинэчилнэ — онлайн цэг, лайк/сэтгэгдэл шинэчлэгдэнэ.
+  useEffect(() => {
+    const t = window.setInterval(() => {
+      void refresh();
+    }, 30000);
+    return () => window.clearInterval(t);
   }, [refresh]);
 
   const canDelete = (post: Post): boolean =>
@@ -91,7 +99,7 @@ export default function Home({ user }: { user: User }) {
     <div className="feed">
       <form className="composer" onSubmit={submitPost}>
         <div className="composer-head">
-          <span className="avatar">{user.name.slice(0, 1).toUpperCase()}</span>
+          <Avatar user={user} showDot />
           <textarea
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
@@ -120,7 +128,7 @@ export default function Home({ user }: { user: User }) {
       {posts.map((post) => (
         <article key={post.id} className="post-card">
           <header className="post-head">
-            <span className="avatar">{post.author.name.slice(0, 1).toUpperCase()}</span>
+            <Avatar user={post.author} showDot />
             <div className="post-meta">
               <UserName user={post.author} />
               <span className="post-time">{timeAgo(post.createdAt)}</span>
@@ -145,7 +153,7 @@ export default function Home({ user }: { user: User }) {
           <div className="comments">
             {post.comments.map((c) => (
               <div key={c.id} className="comment">
-                <span className="avatar small">{c.author.name.slice(0, 1).toUpperCase()}</span>
+                <Avatar user={c.author} size="small" showDot />
                 <div className="comment-body">
                   <UserName user={c.author} />
                   <p>{c.content}</p>
