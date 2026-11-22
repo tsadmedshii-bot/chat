@@ -26,20 +26,47 @@ export type AvatarSize = 'small' | 'medium' | 'large';
 /**
  * Профайл зураг: зураг байвал дугуйгаар харуулж, байхгүй бол нэрний
  * эхний үсэгтэй өнгөт дугуй харуулна. showDot бол онлайн цэгийг давхарлана.
+ * onClick өгвөл зураг дарагдах товч болно (профайл харах).
  */
-export function Avatar({ user, size = 'medium', showDot = false }: { user: User; size?: AvatarSize; showDot?: boolean }) {
+export function Avatar({
+  user,
+  size = 'medium',
+  showDot = false,
+  onClick,
+}: {
+  user: User;
+  size?: AvatarSize;
+  showDot?: boolean;
+  onClick?: (e: React.MouseEvent<HTMLButtonElement>) => void;
+}) {
   const cls = size === 'small' ? 'avatar small' : size === 'large' ? 'avatar large' : 'avatar';
   const inner = user.avatar ? (
     <img className={cls} src={user.avatar} alt={user.name} />
   ) : (
     <span className={cls}>{user.name.slice(0, 1).toUpperCase()}</span>
   );
-  if (!showDot) return inner;
-  return (
+  const withDot = showDot ? (
     <span className="avatar-wrap">
       {inner}
       <OnlineDot online={user.online} />
     </span>
+  ) : (
+    inner
+  );
+  if (!onClick) return withDot;
+  return (
+    <button
+      type="button"
+      className="avatar-btn"
+      onClick={(e) => {
+        // Жагсаалтын мөрийн даралтыг давхардуулахгүй (DM жагсаалт гэх мэт).
+        e.stopPropagation();
+        onClick(e);
+      }}
+      aria-label={`${user.name} — профайл харах`}
+    >
+      {withDot}
+    </button>
   );
 }
 
