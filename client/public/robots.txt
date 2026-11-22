@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://chat-production-cbb38a12.up.railway.app/sitemap.xml
