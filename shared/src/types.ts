@@ -79,3 +79,9 @@ export interface DirectConversation {
   lastMessage: { content: string; createdAt: string; senderId: number } | null;
   unreadCount: number;
 }
+
+/** Хэрэглэгчийн профайл — нийтэд харагдах хэрэглэгч + түүний постын тоо. */
+export interface UserProfile {
+  user: User;
+  postCount: number;
+}
