@@ -1,12 +1,12 @@
 // Чат — /api чиглүүлэгч (бүх endpoint энд).
 import { Router } from 'express';
 import type { NextFunction, Request, Response } from 'express';
-import { and, asc, desc, eq, or } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull, or } from 'drizzle-orm';
 import { db } from './db';
-import { directMessages, dmReads, messages, postComments, postLikes, posts, roomAccess, sessions, users } from './schema';
+import { directMessages, dmReads, messages, postComments, postLikes, posts, roomAccess, sessions, users, banLogs } from './schema';
 import type { AuthUser } from './auth';
-import { createSession, deleteSession, HttpError, registerUser, requireAdmin, requireAuth, verifyPassword } from './auth';
-import type { AccessRequest, AccessStatus, ChatMessage, DirectConversation, DirectMessage, MemberRow, Post, PostComment, Role, Room, User } from '../../shared/src/types';
+import { createSession, deleteSession, HttpError, banMessage, isBannedNow, registerUser, requireAdmin, requireAuth, verifyPassword } from './auth';
+import type { AccessRequest, AccessStatus, BanLog, ChatMessage, DirectConversation, DirectMessage, MemberRow, Post, PostComment, Role, Room, User } from '../../shared/src/types';
 
 export const router = Router();
 
@@ -22,13 +22,13 @@ function isOnline(lastSeenAt: Date | null): boolean {
   return Date.now() - lastSeenAt.getTime() <= ONLINE_WINDOW_MS;
 }
 
-function publicUser(row: { id: number; name: string; username: string; role: string; banned: boolean; canBan: boolean; avatar: string | null; lastSeenAt: Date | null; createdAt: Date }): User {
-  return { id: row.id, name: row.name, username: row.username, role: row.role as Role, banned: row.banned, canBan: row.canBan, avatar: row.avatar ?? null, lastSeenAt: row.lastSeenAt ? toIso(row.lastSeenAt) : null, online: isOnline(row.lastSeenAt), createdAt: toIso(row.createdAt) };
+function publicUser(row: { id: number; name: string; username: string; role: string; banned: boolean; bannedUntil: Date | null; canBan: boolean; avatar: string | null; lastSeenAt: Date | null; createdAt: Date }): User {
+  return { id: row.id, name: row.name, username: row.username, role: row.role as Role, banned: row.banned, bannedUntil: row.bannedUntil ? toIso(row.bannedUntil) : null, canBan: row.canBan, avatar: row.avatar ?? null, lastSeenAt: row.lastSeenAt ? toIso(row.lastSeenAt) : null, online: isOnline(row.lastSeenAt), createdAt: toIso(row.createdAt) };
 }
 
 /** Устгагдсан хэрэглэгчийн оронд харуулдаг орлуулагч. */
 function deletedUser(authorId: number, createdAt: Date): User {
-  return { id: authorId, name: 'Устгасан хэрэглэгч', username: '', role: 'member' as Role, banned: false, canBan: false, avatar: null, lastSeenAt: null, online: false, createdAt: toIso(createdAt) };
+  return { id: authorId, name: 'Устгасан хэрэглэгч', username: '', role: 'member' as Role, banned: false, bannedUntil: null, canBan: false, avatar: null, lastSeenAt: null, online: false, createdAt: toIso(createdAt) };
 }
 
 function toDirectMessage(row: { id: number; senderId: number; recipientId: number; content: string; createdAt: Date }): DirectMessage {
@@ -106,8 +106,12 @@ router.post(
       res.status(401).json({ error: 'Нэвтрэх нэр эсвэл нууц үг буруу байна' });
       return;
     }
-    if (row.banned) {
-      res.status(401).json({ error: 'Таны хаяг бандуулсан байна. Том админтай холбогдоно уу' });
+    if (isBannedNow(row.banned, row.bannedUntil)) {
+      res.status(401).json({
+        error: banMessage(row.bannedUntil),
+        banned: true,
+        bannedUntil: row.bannedUntil ? row.bannedUntil.toISOString() : null,
+      });
       return;
     }
     const token = await createSession(row.id);
@@ -220,6 +224,9 @@ router.delete(
       await tx.delete(directMessages).where(or(eq(directMessages.senderId, u.id), eq(directMessages.recipientId, u.id)));
       await tx.delete(dmReads).where(or(eq(dmReads.userId, u.id), eq(dmReads.partnerId, u.id)));
       await tx.delete(roomAccess).where(eq(roomAccess.userId, u.id));
+      // Бангийн түүхээс энэ хэрэглэгчтэй холбоотой бичлэгүүдийг арилгана —
+      // эс бөгөөс хэрэглэгчийн мөр устгахад гадаад түлхүүрийн алдаа гарна.
+      await tx.delete(banLogs).where(or(eq(banLogs.userId, u.id), eq(banLogs.bannedById, u.id), eq(banLogs.unbannedById, u.id)));
       await tx.delete(users).where(eq(users.id, u.id));
     });
     res.status(204).send();
@@ -694,6 +701,9 @@ router.post('/admin/users/:id/revoke-moderator', requireAuth, requireAdmin, ah(a
 // - Жижиг админ: бандах эрх (can_ban) авсан үедээ л, зөвхөн энгийн хэрэглэгчийг
 //   бандаж чадна — том админ болон өөр жижиг админыг бандаж болохгүй.
 // - Анхдагчаар жижиг админ бандаж болохгүй.
+// Бангийн хугацаа: 5, 15, 30 минут, 24 цаг (1440 минут), эсвэл Байнга (null).
+// Байнга бан нь users.banned (boolean) баганаар, хугацаатай бан нь
+// users.banned_until баганаар тэмдэглэгдэнэ. Бангийн түүх ban_logs-д хадгалагдана.
 
 /** Гишүүдийн жагсаалтыг том админ + бандах эрхтэй жижиг админ харж болно. */
 function requireAdminOrBanModerator(req: Request, res: Response, next: NextFunction): void {
@@ -726,22 +736,132 @@ function canBanTarget(actor: AuthUser, target: { id: number; role: string }): vo
   }
 }
 
-async function setBanned(actor: AuthUser, id: number, banned: boolean): Promise<User> {
+/** Бангийн зөвшөөрөгдсөн хугацаа (минутаар). */
+const BAN_DURATIONS = [5, 15, 30, 1440];
+
+/** Биеийн durationMinutes талбарыг шалгана — буруу утга бол 400. null = Байнга. */
+function parseBanDuration(body: unknown): number | null {
+  const value = (body as { durationMinutes?: unknown } | null | undefined)?.durationMinutes;
+  if (value === undefined || value === null) return null;
+  const n = Number(value);
+  if (!BAN_DURATIONS.includes(n)) {
+    throw new HttpError(400, 'Бангийн хугацаа буруу байна — 5, 15, 30 минут эсвэл 24 цаг сонгоно уу');
+  }
+  return n;
+}
+
+/** Хугацаатай бандах: banned = false, banned_until = одоо + хугацаа.
+    Байнга бандах: banned = true, banned_until = null. Түүхэнд бичлэг нэмнэ. */
+async function banUser(actor: AuthUser, id: number, durationMinutes: number | null): Promise<User> {
   const rows = await db.select().from(users).where(eq(users.id, id)).limit(1);
   if (!rows[0]) throw new HttpError(404, 'Хэрэглэгч олдсонгүй');
   canBanTarget(actor, rows[0]);
-  const updated = await db.update(users).set({ banned }).where(eq(users.id, id)).returning();
-  return publicUser(updated[0]);
+  const now = new Date();
+  const expiresAt = durationMinutes === null ? null : new Date(now.getTime() + durationMinutes * 60_000);
+  const updated = await db.transaction(async (tx) => {
+    // Өмнөх нээлттэй түүхийн бичлэгийг хаана — шинэ бан түүнийг орлоно.
+    await tx
+      .update(banLogs)
+      .set({ unbannedAt: now, unbannedById: actor.id })
+      .where(and(eq(banLogs.userId, id), isNull(banLogs.unbannedAt)));
+    const u = await tx
+      .update(users)
+      .set({ banned: durationMinutes === null, bannedUntil: expiresAt })
+      .where(eq(users.id, id))
+      .returning();
+    await tx.insert(banLogs).values({
+      userId: id,
+      bannedById: actor.id,
+      durationMinutes,
+      bannedAt: now,
+      expiresAt,
+    });
+    return u[0];
+  });
+  return publicUser(updated);
+}
+
+/** Бан тайлах: хоёр баганыг арилгаж, нээлттэй түүхийн бичлэгийг хаана. */
+async function unbanUser(actor: AuthUser, id: number): Promise<User> {
+  const rows = await db.select().from(users).where(eq(users.id, id)).limit(1);
+  if (!rows[0]) throw new HttpError(404, 'Хэрэглэгч олдсонгүй');
+  canBanTarget(actor, rows[0]);
+  const now = new Date();
+  const updated = await db.transaction(async (tx) => {
+    const u = await tx
+      .update(users)
+      .set({ banned: false, bannedUntil: null })
+      .where(eq(users.id, id))
+      .returning();
+    await tx
+      .update(banLogs)
+      .set({ unbannedAt: now, unbannedById: actor.id })
+      .where(and(eq(banLogs.userId, id), isNull(banLogs.unbannedAt)));
+    return u[0];
+  });
+  return publicUser(updated);
 }
 
 router.post('/admin/users/:id/ban', requireAuth, ah(async (req, res) => {
-  const user = await setBanned(req.user as AuthUser, parseId(req, 'Хэрэглэгч олдсонгүй'), true);
+  const durationMinutes = parseBanDuration(req.body);
+  const user = await banUser(req.user as AuthUser, parseId(req, 'Хэрэглэгч олдсонгүй'), durationMinutes);
   res.json({ user });
 }));
 
 router.post('/admin/users/:id/unban', requireAuth, ah(async (req, res) => {
-  const user = await setBanned(req.user as AuthUser, parseId(req, 'Хэрэглэгч олдсонгүй'), false);
+  const user = await unbanUser(req.user as AuthUser, parseId(req, 'Хэрэглэгч олдсонгүй'));
   res.json({ user });
+}));
+
+// ---------------------------------------------------------------- бангийн түүх (зөвхөн том админ)
+// Сүүлийн 100 бичлэг, хамгийн сүүлийнх нь эхэндээ. Төлөв:
+// active = идэвхтэй, expired = хугацаа дууссан, unbanned = гараар тайлсан.
+
+function banLogStatus(log: {
+  durationMinutes: number | null;
+  expiresAt: Date | null;
+  unbannedAt: Date | null;
+  autoExpired: boolean;
+}): BanLog['status'] {
+  if (log.unbannedAt) return log.autoExpired ? 'expired' : 'unbanned';
+  if (log.durationMinutes === null) return 'active';
+  if (log.expiresAt && log.expiresAt.getTime() > Date.now()) return 'active';
+  return 'expired';
+}
+
+router.get('/admin/ban-logs', requireAuth, requireAdmin, ah(async (_req, res) => {
+  const rows = await db.select().from(banLogs).orderBy(desc(banLogs.bannedAt)).limit(100);
+  const userIds = new Set<number>();
+  for (const r of rows) {
+    userIds.add(r.userId);
+    userIds.add(r.bannedById);
+    if (r.unbannedById !== null) userIds.add(r.unbannedById);
+  }
+  const userRows = userIds.size > 0 ? await db.select().from(users) : [];
+  const userById = new Map(userRows.map((u) => [u.id, u]));
+  const mini = (id: number | null): { id: number; username: string; name: string } | null => {
+    if (id === null) return null;
+    const u = userById.get(id);
+    if (!u) return { id, username: '', name: 'Устгасан хэрэглэгч' };
+    return { id: u.id, username: u.username, name: u.name };
+  };
+  const logs: BanLog[] = rows.map((r) => {
+    const user = mini(r.userId);
+    const bannedBy = mini(r.bannedById);
+    return {
+      id: r.id,
+      user: user ?? { id: r.userId, username: '', name: 'Устгасан хэрэглэгч' },
+      bannedBy: bannedBy ?? { id: r.bannedById, username: '', name: 'Устгасан хэрэглэгч' },
+      durationMinutes: r.durationMinutes,
+      bannedAt: toIso(r.bannedAt),
+      expiresAt: r.expiresAt ? toIso(r.expiresAt) : null,
+      unbannedAt: r.unbannedAt ? toIso(r.unbannedAt) : null,
+      unbannedBy: mini(r.unbannedById),
+      autoExpired: r.autoExpired,
+      status: banLogStatus(r),
+    };
+  });
+  res.json({ logs });
 }));
 
 async function setBanPermission(id: number, canBan: boolean): Promise<User> {
