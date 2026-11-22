@@ -3,7 +3,7 @@ import { Router } from 'express';
 import type { NextFunction, Request, Response } from 'express';
 import { and, asc, desc, eq, or } from 'drizzle-orm';
 import { db } from './db';
-import { directMessages, dmReads, messages, postComments, postLikes, posts, roomAccess, users } from './schema';
+import { directMessages, dmReads, messages, postComments, postLikes, posts, roomAccess, sessions, users } from './schema';
 import type { AuthUser } from './auth';
 import { createSession, deleteSession, HttpError, registerUser, requireAdmin, requireAuth, verifyPassword } from './auth';
 import type { AccessRequest, AccessStatus, ChatMessage, DirectConversation, DirectMessage, MemberRow, Post, PostComment, Role, Room, User } from '../../shared/src/types';
@@ -188,6 +188,41 @@ router.delete(
     const u = req.user as AuthUser;
     const updated = await db.update(users).set({ avatar: null }).where(eq(users.id, u.id)).returning();
     res.json({ user: publicUser(updated[0]) });
+  }),
+);
+
+// ---------------------------------------------------------------- профайл устгах
+// Нууц үгээ баталгаажуулж, өөрийн бүх өгөгдлийг (сесс, пост, сэтгэгдэл,
+// таалагдсан, өрөөний мессеж, хувь чат, зөвшөөрөл) нэг гүйлгээнд устгана.
+// Том админ өөрийгөө устгаж болохгүй — чат админгүй үлдэнэ.
+
+router.delete(
+  '/me',
+  requireAuth,
+  ah(async (req, res) => {
+    const u = req.user as AuthUser;
+    if (u.role === 'admin') {
+      throw new HttpError(400, 'Том админ өөрийн профайлыг устгах боломжгүй');
+    }
+    const password = String(req.body?.password ?? '');
+    const rows = await db.select().from(users).where(eq(users.id, u.id)).limit(1);
+    const row = rows[0];
+    if (!row || !(await verifyPassword(password, row.passwordHash))) {
+      throw new HttpError(401, 'Нууц үг буруу байна');
+    }
+    await db.transaction(async (tx) => {
+      await tx.delete(sessions).where(eq(sessions.userId, u.id));
+      await tx.delete(postLikes).where(eq(postLikes.userId, u.id));
+      await tx.delete(postComments).where(eq(postComments.authorId, u.id));
+      // Миний постууд дээрх бусдын like/сэтгэгдэл cascade-аар арилна.
+      await tx.delete(posts).where(eq(posts.authorId, u.id));
+      await tx.delete(messages).where(eq(messages.authorId, u.id));
+      await tx.delete(directMessages).where(or(eq(directMessages.senderId, u.id), eq(directMessages.recipientId, u.id)));
+      await tx.delete(dmReads).where(or(eq(dmReads.userId, u.id), eq(dmReads.partnerId, u.id)));
+      await tx.delete(roomAccess).where(eq(roomAccess.userId, u.id));
+      await tx.delete(users).where(eq(users.id, u.id));
+    });
+    res.status(204).send();
   }),
 );
 
