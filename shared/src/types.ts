@@ -10,6 +10,9 @@ export interface User {
   role: Role;
   /** Том админаас бандуулсан эсэх — бандуулсан хэрэглэгч нэвтэрч чадахгүй. */
   banned: boolean;
+  /** Хугацаатай бан дуусах цаг (ISO) — байхгүй бол null. Байнга бан нь
+      `banned` талбараар тэмдэглэгдэнэ. */
+  bannedUntil: string | null;
   /** Жижиг админд бандах эрх олгосон эсэх (зөвхөн moderator-д хамаарна). */
   canBan: boolean;
   /** Профайл зураг (data URL) — байхгүй бол null. */
@@ -62,6 +65,22 @@ export interface MemberRow {
   user: User;
   /** Зөвшөөрөлтэй өрөөнд нэвтрэх эрх: админ/жижиг админ автоматаар 'approved'. */
   privateAccess: AccessStatus | 'auto' | 'none';
+}
+
+/** Бангийн түүхийн нэг бичлэг (зөвхөн том админ харна). */
+export interface BanLog {
+  id: number;
+  user: { id: number; username: string; name: string };
+  bannedBy: { id: number; username: string; name: string };
+  /** Бангийн хугацаа минутаар — null = байнга. */
+  durationMinutes: number | null;
+  bannedAt: string;
+  expiresAt: string | null;
+  unbannedAt: string | null;
+  unbannedBy: { id: number; username: string; name: string } | null;
+  autoExpired: boolean;
+  /** active = идэвхтэй, expired = хугацаа дууссан, unbanned = гараар тайлсан. */
+  status: 'active' | 'expired' | 'unbanned';
 }
 
 /** Хувь чат (1:1) мессеж. */
