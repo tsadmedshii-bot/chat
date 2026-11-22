@@ -274,6 +274,70 @@ textarea:focus {
   font-weight: 600;
 }
 
+.btn-danger {
+  background: var(--danger);
+  color: #2b0404;
+  border: none;
+  border-radius: 999px;
+  padding: 10px 18px;
+  font-weight: 700;
+}
+
+.btn-danger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Аюултай бүс — профайл устгах */
+.danger-zone {
+  margin-top: 28px;
+  padding: 16px;
+  border: 1px solid rgba(248, 113, 113, 0.45);
+  border-radius: 14px;
+  background: rgba(248, 113, 113, 0.06);
+  text-align: left;
+}
+
+.danger-zone h3 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+}
+
+.danger-zone p {
+  margin: 0 0 10px;
+}
+
+.delete-confirm ul {
+  margin: 0 0 12px;
+  padding-left: 20px;
+}
+
+.delete-confirm label {
+  display: block;
+  margin-bottom: 12px;
+  font-weight: 600;
+}
+
+.delete-confirm input {
+  margin-top: 6px;
+}
+
+/* Апп суулгах */
+.install-app {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.install-app .btn-primary {
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+.install-app p {
+  margin: 0;
+}
+
 .error {
   color: #fca5a5;
   background: rgba(248, 113, 113, 0.12);
