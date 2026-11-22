@@ -9,7 +9,7 @@ const ROOMS: { id: Room; label: string; desc: string }[] = [
   { id: 'private', label: '🏰 Зөвшөөрөлтэй өрөө', desc: 'Зөвхөн зөвшөөрөлтэй гишүүд' },
 ];
 
-export default function Rooms({ user }: { user: User }) {
+export default function Rooms({ user, onViewProfile }: { user: User; onViewProfile: (userId: number) => void }) {
   const [room, setRoom] = useState<Room>('public');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
@@ -154,7 +154,7 @@ export default function Rooms({ user }: { user: User }) {
             {messages.length === 0 && <p className="empty">Одоохондоо мессеж алга — хамгийн түрүүнд та бичээрэй! ✨</p>}
             {messages.map((m) => (
               <div key={m.id} className={m.author.id === user.id ? 'message mine' : 'message'}>
-                <Avatar user={m.author} showDot />
+                <Avatar user={m.author} showDot onClick={() => onViewProfile(m.author.id)} />
                 <div className="message-body">
                   <UserName user={m.author} />
                   <p>{m.content}</p>
