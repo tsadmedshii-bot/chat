@@ -187,6 +187,7 @@ export default function Rooms({ user, onViewProfile }: { user: User; onViewProfi
           {showEmoji && (
             <EmojiPicker onPick={(e) => setDraft((d) => d + e)} onClose={() => setShowEmoji(false)} />
           )}
+          <p className="muted small">💬 Мессежүүд 5 минутын дараа автоматаар устах болно. Постууд устахгүй.</p>
         </>
       )}
     </div>
