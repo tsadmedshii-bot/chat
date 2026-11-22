@@ -68,7 +68,8 @@ textarea:focus {
   color: var(--muted);
 }
 
-/* Толгой */
+/* Толгой — ширээний компьютер: нэг мөр (брэнд | цэс | хэрэглэгч);
+   утас (~390px): хоёр цэгцтэй мөр (брэнд + хэрэглэгч, доор нь гүйлгэдэг цэс). */
 .site-header {
   position: sticky;
   top: 0;
@@ -78,12 +79,16 @@ textarea:focus {
   border-bottom: 1px solid var(--border);
 }
 
+.site-header .container {
+  max-width: 960px;
+}
+
 .header-inner {
   display: flex;
   align-items: center;
   gap: 12px;
-  min-height: 60px;
-  flex-wrap: wrap;
+  min-height: 56px;
+  flex-wrap: nowrap;
   padding-top: 6px;
   padding-bottom: 6px;
 }
@@ -97,6 +102,8 @@ textarea:focus {
   color: var(--text);
   font-size: 1.35rem;
   font-weight: 800;
+  flex-shrink: 0;
+  padding: 0;
 }
 
 .brand-icon {
@@ -108,7 +115,15 @@ textarea:focus {
   display: flex;
   gap: 6px;
   flex: 1;
-  flex-wrap: wrap;
+  min-width: 0;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  justify-content: center;
+}
+
+.main-nav::-webkit-scrollbar {
+  display: none;
 }
 
 .main-nav button {
@@ -118,6 +133,8 @@ textarea:focus {
   border-radius: 999px;
   padding: 8px 12px;
   font-size: 0.95rem;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .main-nav button.active {
@@ -126,18 +143,83 @@ textarea:focus {
   border-color: var(--border);
 }
 
+/* Хэрэглэгчийн чип: зураг + нэр + тэмдэг + Гарах — бүгд нэг мөрөнд. */
 .header-user {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-shrink: 0;
+  min-width: 0;
 }
 
-.header-user-badge {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  font-weight: 600;
+.header-user-name {
+  font-weight: 700;
   font-size: 0.9rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 110px;
+}
+
+.header-user .role-badge {
+  margin-bottom: 0;
+}
+
+.header-logout {
+  flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+  .header-inner {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, auto);
+    grid-template-areas:
+      'brand user'
+      'nav nav';
+    row-gap: 6px;
+    column-gap: 8px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  .brand {
+    grid-area: brand;
+    font-size: 1.2rem;
+    min-width: 0;
+  }
+
+  .brand-icon {
+    font-size: 1.4rem;
+  }
+
+  .main-nav {
+    grid-area: nav;
+    justify-content: flex-start;
+  }
+
+  .main-nav button {
+    padding: 7px 10px;
+    font-size: 0.9rem;
+  }
+
+  .header-user {
+    grid-area: user;
+    gap: 6px;
+  }
+
+  .header-user-name {
+    max-width: 64px;
+  }
+
+  .header-user .role-badge {
+    font-size: 0.68rem;
+    padding: 2px 6px;
+  }
+
+  .header-logout {
+    padding: 5px 9px;
+    font-size: 0.85rem;
+  }
 }
 
 .main-content {
@@ -356,6 +438,27 @@ img.avatar {
   padding: 0;
 }
 
+/* Дарагдах зураг — профайл цонх нээнэ. */
+.avatar-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  display: inline-flex;
+  border-radius: 50%;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.avatar-btn:hover {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.avatar-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 /* Онлайн/офлайн цэг */
 .online-dot {
   width: 11px;
@@ -421,6 +524,126 @@ img.avatar {
   margin-top: 8px;
 }
 
+/* Профайл статистик (цонх болон өөрийн профайл хуудсанд адилхан) */
+.profile-stats {
+  display: flex;
+  gap: 28px;
+  justify-content: center;
+  margin: 8px 0;
+}
+
+.profile-stats > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.profile-stats strong {
+  font-size: 1.15rem;
+}
+
+.profile-stats span {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+/* Профайл цонх */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(2, 6, 20, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.profile-modal {
+  position: relative;
+  width: 100%;
+  max-width: 380px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 28px 20px 20px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.profile-modal h2 {
+  margin: 4px 0 0;
+}
+
+.profile-modal p {
+  margin: 0;
+}
+
+.modal-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.profile-modal-badges {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.profile-modal-badges .role-badge {
+  margin-bottom: 0;
+}
+
+/* Том зураг (lightbox) */
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(0, 0, 0, 0.92);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  cursor: pointer;
+}
+
+.lightbox-img {
+  max-width: 100%;
+  max-height: 88vh;
+  border-radius: 12px;
+  object-fit: contain;
+}
+
+.lightbox-hint {
+  position: fixed;
+  bottom: 20px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.9rem;
+  pointer-events: none;
+}
+
 /* Хувь чат */
 .dm-wrap {
   display: grid;
@@ -457,6 +680,7 @@ img.avatar {
   color: var(--text);
   text-align: left;
   margin-top: 6px;
+  cursor: pointer;
 }
 
 .dm-item.active {
@@ -921,9 +1145,5 @@ img.avatar {
 
   .dm-wrap {
     grid-template-columns: 1fr;
-  }
-
-  .header-inner {
-    gap: 8px;
   }
 }
