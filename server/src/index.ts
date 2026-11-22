@@ -8,6 +8,7 @@ import express from 'express';
 import cors from 'cors';
 import { router } from './routes';
 import { HttpError } from './auth';
+import { startCleanup } from './cleanup';
 import { projectRoot } from './paths';
 
 const missing: string[] = [];
@@ -58,3 +59,6 @@ const PORT = Number(process.env.PORT || 3001);
 app.listen(PORT, () => {
   console.log(`Чат сервер ажиллаж байна: http://localhost:${PORT}`);
 });
+
+// 5 минутын мессеж + хугацаа нь дууссан бангийн цэвэрлэгээ.
+startCleanup();
