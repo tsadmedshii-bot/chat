@@ -191,6 +191,7 @@ export default function Direct({
                 Илгээх
               </button>
             </form>
+            <p className="muted small">💬 Мессежүүд 5 минутын дараа автоматаар устах болно.</p>
           </>
         )}
       </div>
