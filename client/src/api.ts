@@ -1,5 +1,5 @@
 // Чат — API клиент (same-origin; Vite dev нь /api-г localhost:3001 рүү proxy хийдэг).
-import type { AccessRequest, AccessStatus, ChatMessage, DirectConversation, DirectMessage, MemberRow, Post, PostComment, Room, User } from '../../shared/src/types';
+import type { AccessRequest, AccessStatus, ChatMessage, DirectConversation, DirectMessage, MemberRow, Post, PostComment, Room, User, UserProfile } from '../../shared/src/types';
 
 const TOKEN_KEY = 'chat_token';
 
@@ -214,6 +214,11 @@ export async function uploadAvatar(avatar: string): Promise<User> {
 export async function removeAvatar(): Promise<User> {
   const data = await api<User | { user: User }>('/api/me/avatar', { method: 'DELETE' });
   return unwrapOne(data);
+}
+
+/** Хэрэглэгчийн профайл (зураг, онлайн төлөв, постын тоо). */
+export async function getUserProfile(userId: number): Promise<UserProfile> {
+  return api<UserProfile>(`/api/users/${userId}`);
 }
 
 // ---------------------------------------------------------------- хувь чат (1:1)
