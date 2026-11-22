@@ -23,7 +23,15 @@ function accessLabel(row: MemberRow): string {
   return 'Хүсэлтгүй';
 }
 
-export default function Members({ user, onOpenDm }: { user: User; onOpenDm: (userId: number) => void }) {
+export default function Members({
+  user,
+  onOpenDm,
+  onViewProfile,
+}: {
+  user: User;
+  onOpenDm: (userId: number) => void;
+  onViewProfile: (userId: number) => void;
+}) {
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [requests, setRequests] = useState<AccessRequest[]>([]);
   const [error, setError] = useState('');
@@ -188,7 +196,7 @@ export default function Members({ user, onOpenDm }: { user: User; onOpenDm: (use
       <h3>👥 Бүх гишүүд ({members.length})</h3>
       {members.map((row) => (
         <div key={row.user.id} className="member-row">
-          <Avatar user={row.user} showDot />
+          <Avatar user={row.user} showDot onClick={() => onViewProfile(row.user.id)} />
           <div>
             <UserName user={row.user} />
             {row.user.banned && <span className="banned-badge">🚫 Бандуулсан</span>}
