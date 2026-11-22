@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { User } from '../../shared/src/types';
-import { heartbeat, logout, me } from './api';
+import { ApiError, BAN_EVENT, heartbeat, logout, me } from './api';
 import Home from './pages/Home';
 import Auth from './pages/Auth';
 import Rooms from './pages/Rooms';
@@ -8,6 +8,7 @@ import Members from './pages/Members';
 import Direct from './pages/Direct';
 import Profile from './pages/Profile';
 import ProfileModal from './components/ProfileModal';
+import BanNotice from './components/BanNotice';
 import { Avatar, RoleBadge } from './components/UserBadge';
 
 type View = 'home' | 'rooms' | 'direct' | 'members' | 'profile';
@@ -20,12 +21,32 @@ export default function App() {
   const [dmPartnerId, setDmPartnerId] = useState<number | null>(null);
   /** Профайл цонхоор харж буй хэрэглэгч — null бол цонх хаалттай. */
   const [profileUserId, setProfileUserId] = useState<number | null>(null);
+  /** Бандуулсан мэдэгдэл — нэвтэрсэн үедээ бандуулсан, эсвэл бантай
+      хаягаар апп нээсэн үед дэлгэц дүүрэн харуулна. */
+  const [ban, setBan] = useState<{ bannedUntil: string | null } | null>(null);
+
+  // Ямар ч хүсэлт бангийн 401 буцаавал (жишээ нь сессийн дундуур бандуулсан)
+  // токеныг арилгаж, дэлгэц дүүрэн бангийн мэдэгдэл харуулна.
+  useEffect(() => {
+    const onBan = (e: Event) => {
+      const detail = (e as CustomEvent<{ bannedUntil: string | null }>).detail;
+      logout();
+      setUser(null);
+      setBan({ bannedUntil: detail?.bannedUntil ?? null });
+    };
+    window.addEventListener(BAN_EVENT, onBan);
+    return () => window.removeEventListener(BAN_EVENT, onBan);
+  }, []);
 
   useEffect(() => {
     me()
       .then((u) => setUser(u))
-      .catch(() => {
-        // Нэвтрээгүй — алдааг үл тооно.
+      .catch((err) => {
+        // Бантай хаягаар нээсэн бол нэвтрэх хуудас руу чимээгүй шилжүүлэхгүй —
+        // бангийн мэдэгдэл харуулна. Бусад алдааг үл тооно.
+        if (err instanceof ApiError && err.banned) {
+          setBan({ bannedUntil: err.bannedUntil ?? null });
+        }
       })
       .finally(() => setLoading(false));
   }, []);
@@ -45,12 +66,14 @@ export default function App() {
   }, [user]);
 
   const handleAuthDone = useCallback((u: User) => {
+    setBan(null);
     setUser(u);
     setView('home');
   }, []);
 
   function handleLogout() {
     logout();
+    setBan(null);
     setUser(null);
     setView('home');
     setDmPartnerId(null);
@@ -66,6 +89,18 @@ export default function App() {
   }
 
   if (!user) {
+    if (ban) {
+      return (
+        <div className="auth-wrap">
+          <div className="auth-card">
+            <BanNotice bannedUntil={ban.bannedUntil} />
+            <button type="button" className="btn-ghost" onClick={() => setBan(null)}>
+              Өөр хаягаар нэвтрэх
+            </button>
+          </div>
+        </div>
+      );
+    }
     return <Auth onDone={handleAuthDone} />;
   }
 
