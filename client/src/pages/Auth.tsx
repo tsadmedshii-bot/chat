@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { User } from '../../../shared/src/types';
 import { ApiError, login, register } from '../api';
 import InstallApp from '../components/InstallApp';
+import BanNotice from '../components/BanNotice';
 
 export default function Auth({ onDone }: { onDone: (user: User) => void }) {
   const [mode, setMode] = useState<'login' | 'register'>('register');
@@ -9,11 +10,14 @@ export default function Auth({ onDone }: { onDone: (user: User) => void }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  /** Бантай хаягаар нэвтрэх гэсэн үеийн мэдэгдэл (хугацаатай). */
+  const [ban, setBan] = useState<{ bannedUntil: string | null } | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function submit(e: React.FormEvent): Promise<void> {
     e.preventDefault();
     setError('');
+    setBan(null);
     setBusy(true);
     try {
       const user =
@@ -22,7 +26,12 @@ export default function Auth({ onDone }: { onDone: (user: User) => void }) {
           : await login(username, password);
       onDone(user);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Алдаа гарлаа. Дахин оролдоно уу.');
+      if (err instanceof ApiError && err.banned) {
+        // Бандуулсан — хугацааг нь тод харуулна.
+        setBan({ bannedUntil: err.bannedUntil ?? null });
+      } else {
+        setError(err instanceof ApiError ? err.message : 'Алдаа гарлаа. Дахин оролдоно уу.');
+      }
     } finally {
       setBusy(false);
     }
@@ -61,7 +70,11 @@ export default function Auth({ onDone }: { onDone: (user: User) => void }) {
             Нууц үг
             <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Хамгийн багадаа 4 тэмдэгт" autoComplete={mode === 'register' ? 'new-password' : 'current-password'} />
           </label>
-          {error && <p className="error">{error}</p>}
+          {ban ? (
+            <BanNotice bannedUntil={ban.bannedUntil} />
+          ) : (
+            error && <p className="error">{error}</p>
+          )}
           <button type="submit" className="btn-primary" disabled={busy}>
             {busy ? 'Түр хүлээнэ үү…' : mode === 'register' ? 'Бүртгүүлэх' : 'Нэвтрэх'}
           </button>
