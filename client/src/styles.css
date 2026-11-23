@@ -1297,3 +1297,37 @@ img.avatar {
     grid-template-columns: 1fr;
   }
 }
+
+/* Бага зэрэг сүүдэр — картууд, мессежүүд зөөлөн гүнзгий харагдана. */
+.composer,
+.post-card,
+.message-list,
+.dm-list,
+.dm-thread,
+.member-row,
+.profile-card,
+.locked-card,
+.room-tab {
+  box-shadow: 0 4px 18px rgba(12, 7, 2, 0.45);
+}
+
+.message-body,
+.dm-message,
+.comment-body,
+.ban-log-row,
+.ban-notice,
+.danger-zone {
+  box-shadow: 0 2px 8px rgba(12, 7, 2, 0.35);
+}
+
+.site-header {
+  box-shadow: 0 4px 16px rgba(12, 7, 2, 0.4);
+}
+
+.btn-primary {
+  box-shadow: 0 4px 14px rgba(212, 175, 55, 0.3);
+}
+
+.btn-ghost {
+  box-shadow: 0 2px 8px rgba(12, 7, 2, 0.35);
+}
