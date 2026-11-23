@@ -243,6 +243,11 @@ export async function setTextColor(userId: number, color: string | null): Promis
   return unwrapOne(data);
 }
 
+/** Хэрэглэгчийн аккоунтийг устгах (пост, мессеж, чаттай нь хамт) — зөвхөн том админ. */
+export async function adminDeleteUser(userId: number): Promise<void> {
+  await api<void>(`/api/admin/users/${userId}`, { method: 'DELETE' });
+}
+
 // ---------------------------------------------------------------- онлайн/офлайн + профайл зураг
 
 export async function heartbeat(): Promise<void> {
