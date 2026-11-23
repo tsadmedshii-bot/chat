@@ -13,6 +13,7 @@ import {
   adminRevokeModerator,
   adminUnbanUser,
   getBanLogs,
+  me,
   setTextColor,
 } from '../api';
 import UserName, { Avatar } from '../components/UserBadge';
@@ -104,10 +105,12 @@ export default function Members({
   user,
   onOpenDm,
   onViewProfile,
+  onUserChange,
 }: {
   user: User;
   onOpenDm: (userId: number) => void;
   onViewProfile: (userId: number) => void;
+  onUserChange?: (u: User) => void;
 }) {
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [requests, setRequests] = useState<AccessRequest[]>([]);
@@ -115,15 +118,41 @@ export default function Members({
   const [banTargetId, setBanTargetId] = useState<number | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const isAdmin = user.role === 'admin';
+  // Хуудас нээгдэх бүрд өөрийн эрхийг серверээс дахин авна: нэвтэрсэн
+  // хэвээр байхдаа эрх авсан (жишээ нь жижиг админ + бандах эрх) бол
+  // хуучирсан prop-оос болоод товч нь харагдахгүй байх алдааг засна.
+  const [freshUser, setFreshUser] = useState<User | null>(null);
+  const viewer = freshUser ?? user;
+  const isAdmin = viewer.role === 'admin';
   // Гишүүд хэсгийг том админ + бандах эрхтэй жижиг админ харна.
-  const canView = isAdmin || (user.role === 'moderator' && user.canBan);
+  const canView = isAdmin || (viewer.role === 'moderator' && viewer.canBan);
   // Энэ хэрэглэгчийг бандаж болох эсэх (UI түвшинд; сервер дахин шалгана).
   const canBanRow = (row: MemberRow): boolean => {
-    if (row.user.id === user.id) return false;
+    if (row.user.id === viewer.id) return false;
     if (isAdmin) return row.user.role !== 'admin';
-    return user.role === 'moderator' && user.canBan && row.user.role === 'member';
+    return viewer.role === 'moderator' && viewer.canBan && row.user.role === 'member';
   };
+
+  useEffect(() => {
+    let cancelled = false;
+    me()
+      .then((fresh) => {
+        if (cancelled) return;
+        setFreshUser(fresh);
+        // Эрх нь өөрчлөгдсөн бол дээд түвшний төлөвийг ч шинэчилнэ.
+        if (onUserChange && (fresh.role !== user.role || fresh.canBan !== user.canBan)) {
+          onUserChange(fresh);
+        }
+      })
+      .catch(() => {
+        // Ачаалж чадсангүй — хуучин хэрэглэгчээр үргэлжлүүлнэ.
+      });
+    return () => {
+      cancelled = true;
+    };
+    // Зөвхөн хуудас нээгдэхэд нэг удаа.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const refresh = useCallback(async () => {
     if (!canView) return;
@@ -374,7 +403,7 @@ export default function Members({
             )}
           </div>
           <div className="member-actions">
-            {row.user.id !== user.id && (
+            {row.user.id !== viewer.id && (
               <button type="button" className="btn-ghost small" onClick={() => onOpenDm(row.user.id)}>
                 💬 Чат
               </button>
