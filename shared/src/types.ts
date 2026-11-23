@@ -17,6 +17,8 @@ export interface User {
   canBan: boolean;
   /** Профайл зураг (data URL) — байхгүй бол null. */
   avatar: string | null;
+  /** Бичлэгийн өнгө ('#RRGGBB') — зөвхөн том админ онооно, байхгүй бол null. */
+  textColor: string | null;
   /** Сүүлд идэвхтэй байсан цаг (ISO) — хэзээ ч идэвхжээгүй бол null. */
   lastSeenAt: string | null;
   /** Сүүлийн 90 секундэд идэвхтэй байсан эсэх. */
