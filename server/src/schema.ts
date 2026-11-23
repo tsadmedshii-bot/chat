@@ -16,6 +16,8 @@ export const users = pgTable('users', {
   lastSeenAt: timestamp('last_seen_at'),
   /** Профайл зураг — data URL (JPEG/PNG/WebP, 500 KB хүртэл). */
   avatar: text('avatar'),
+  /** Бичлэгийн өнгө ('#RRGGBB') — зөвхөн том админ онооно. NULL = анхдагч өнгө. */
+  textColor: text('text_color'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 }, (t) => [uniqueIndex('users_username_unique').on(t.username)]);
 
