@@ -234,6 +234,15 @@ export async function adminRevokeBanPermission(userId: number): Promise<User> {
   return unwrapOne(data);
 }
 
+/** Бичлэгийн өнгө оноох / арилгах (color: '#RRGGBB' эсвэл null) — зөвхөн том админ. */
+export async function setTextColor(userId: number, color: string | null): Promise<User> {
+  const data = await api<User | { user: User }>(
+    `/api/admin/users/${userId}/text-color`,
+    jsonBody({ color }),
+  );
+  return unwrapOne(data);
+}
+
 // ---------------------------------------------------------------- онлайн/офлайн + профайл зураг
 
 export async function heartbeat(): Promise<void> {
