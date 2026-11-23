@@ -649,6 +649,11 @@ img.avatar {
   margin: 0;
 }
 
+/* Профайл цонхон дахь бангийн хугацаа сонгогч — голлуулж харуулна. */
+.profile-modal .ban-chooser {
+  justify-content: center;
+}
+
 .modal-close {
   position: absolute;
   top: 10px;
