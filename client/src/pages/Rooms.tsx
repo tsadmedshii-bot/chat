@@ -157,7 +157,12 @@ export default function Rooms({ user, onViewProfile }: { user: User; onViewProfi
                 <Avatar user={m.author} showDot onClick={() => onViewProfile(m.author.id)} />
                 <div className="message-body">
                   <UserName user={m.author} />
-                  <p>{m.content}</p>
+                  <p
+                    className={m.author.role === 'admin' ? 'message-admin' : undefined}
+                    style={m.author.textColor ? { color: m.author.textColor } : undefined}
+                  >
+                    {m.content}
+                  </p>
                   <span className="message-time">
                     {new Date(m.createdAt).toLocaleString('mn-MN', { hour: '2-digit', minute: '2-digit' })}
                   </span>
@@ -187,7 +192,7 @@ export default function Rooms({ user, onViewProfile }: { user: User; onViewProfi
           {showEmoji && (
             <EmojiPicker onPick={(e) => setDraft((d) => d + e)} onClose={() => setShowEmoji(false)} />
           )}
-          <p className="muted small">💬 Мессежүүд 5 минутын дараа автоматаар устах болно. Постууд устахгүй.</p>
+          <p className="muted small">💬 Мессежүүд 15 минутын дараа автоматаар устах болно. Постууд устахгүй.</p>
         </>
       )}
     </div>
