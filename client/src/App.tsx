@@ -154,7 +154,7 @@ export default function App() {
             onViewProfile={setProfileUserId}
           />
         )}
-        {view === 'members' && <Members user={user} onOpenDm={openDm} onViewProfile={setProfileUserId} />}
+        {view === 'members' && <Members user={user} onOpenDm={openDm} onViewProfile={setProfileUserId} onUserChange={setUser} />}
         {view === 'profile' && <Profile user={user} onUserChange={setUser} onAccountDeleted={handleLogout} />}
       </main>
       {profileUserId !== null && (
