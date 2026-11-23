@@ -42,6 +42,8 @@ export interface AuthUser {
   bannedUntil: Date | null;
   canBan: boolean;
   avatar: string | null;
+  /** Бичлэгийн өнгө ('#RRGGBB') — байхгүй бол null. */
+  textColor: string | null;
   lastSeenAt: Date | null;
   createdAt: Date;
 }
@@ -89,6 +91,7 @@ async function loadUserByToken(token: string): Promise<AuthUser | null> {
       bannedUntil: users.bannedUntil,
       canBan: users.canBan,
       avatar: users.avatar,
+      textColor: users.textColor,
       lastSeenAt: users.lastSeenAt,
       createdAt: users.createdAt,
     })
@@ -192,7 +195,7 @@ export async function registerUser(
   const inserted = await db
     .insert(users)
     .values({ name: cleanName, username: cleanUsername, passwordHash, role, lastSeenAt: now })
-    .returning({ id: users.id, name: users.name, username: users.username, role: users.role, banned: users.banned, bannedUntil: users.bannedUntil, canBan: users.canBan, avatar: users.avatar, lastSeenAt: users.lastSeenAt, createdAt: users.createdAt });
+    .returning({ id: users.id, name: users.name, username: users.username, role: users.role, banned: users.banned, bannedUntil: users.bannedUntil, canBan: users.canBan, avatar: users.avatar, textColor: users.textColor, lastSeenAt: users.lastSeenAt, createdAt: users.createdAt });
   const row = inserted[0];
   return { ...row, role: row.role as Role };
 }
