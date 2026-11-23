@@ -1,6 +1,6 @@
 // Чат — тогтмол цэвэрлэгээний ажил (in-process, 60 секунд тутамд).
 // Сервер нь Railway дээр ганц instance-аар ажилладаг тул setInterval хангалттай.
-// 1) 5 минутаас хуучин өрөөний болон хувь чатын мессежийг устгана
+// 1) 15 минутаас хуучин өрөөний болон хувь чатын мессежийг устгана
 //    (постод хамаарахгүй — постууд хэвээрээ үлдэнэ).
 // 2) Хугацаа нь дууссан хугацаатай банг тайлж, бангийн түүхийг
 //    auto_expired гэж тэмдэглэнэ (байнга банд хүрэхгүй).
@@ -9,7 +9,7 @@
 import { sql } from 'drizzle-orm';
 import { db } from './db';
 
-const MESSAGE_TTL = "interval '5 minutes'";
+const MESSAGE_TTL = "interval '15 minutes'";
 const DEFAULT_INTERVAL_MS = 60_000;
 
 export interface CleanupResult {
