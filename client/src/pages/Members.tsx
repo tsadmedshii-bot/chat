@@ -13,6 +13,7 @@ import {
   adminRevokeModerator,
   adminUnbanUser,
   getBanLogs,
+  setTextColor,
 } from '../api';
 import UserName, { Avatar } from '../components/UserBadge';
 
@@ -50,6 +51,53 @@ function statusLabel(status: BanLog['status']): string {
   if (status === 'active') return 'Идэвхтэй';
   if (status === 'expired') return 'Хугацаа дууссан';
   return 'Цуцалсан';
+}
+
+/** Бичлэгийн өнгөний бэлэн сонголтууд (зөвхөн том админ онооно). */
+const PRESET_COLORS = ['#D4AF37', '#E5484D', '#3E63DD', '#30A46C', '#8E4EC6', '#D6409F', '#F76B15', '#12A594'];
+
+/** Нэг хэрэглэгчийн бичлэгийн өнгө сонгогч — бэлэн өнгө + дурын өнгө + арилгах. */
+function TextColorPicker({
+  userId,
+  current,
+  onPick,
+}: {
+  userId: number;
+  current: string | null;
+  onPick: (id: number, color: string | null) => void;
+}) {
+  const [custom, setCustom] = useState(current ?? '#D4AF37');
+  return (
+    <div className="color-picker">
+      <span className="muted small">Бичлэгийн өнгө:</span>
+      {PRESET_COLORS.map((c) => (
+        <button
+          key={c}
+          type="button"
+          className={current === c ? 'color-swatch active' : 'color-swatch'}
+          style={{ backgroundColor: c }}
+          title={c}
+          aria-label={`Өнгө ${c}`}
+          onClick={() => onPick(userId, c)}
+        />
+      ))}
+      <input
+        type="color"
+        value={custom}
+        onChange={(e) => setCustom(e.target.value)}
+        title="Өөр өнгө сонгох"
+        aria-label="Өөр өнгө сонгох"
+      />
+      <button type="button" className="btn-ghost small" onClick={() => onPick(userId, custom)}>
+        Сонгох
+      </button>
+      {current && (
+        <button type="button" className="btn-ghost small" onClick={() => onPick(userId, null)}>
+          Арилгах
+        </button>
+      )}
+    </div>
+  );
 }
 
 export default function Members({
@@ -195,6 +243,17 @@ export default function Members({
     }
   }
 
+  async function setColor(id: number, color: string | null): Promise<void> {
+    setError('');
+    try {
+      await setTextColor(id, color);
+      setNotice(color ? 'Бичлэгийн өнгө оноолоо.' : 'Бичлэгийн өнгийг арилгалаа.');
+      await refresh();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Алдаа гарлаа.');
+    }
+  }
+
   return (
     <div className="members">
       <h2>{isAdmin ? '👑 Том админ — Гишүүд' : '⚔️🛡️ Жижиг админ — Гишүүд'}</h2>
@@ -309,6 +368,9 @@ export default function Members({
               <div className="muted small">
                 Бандах эрх: {row.user.canBan ? 'Олгосон ✅' : 'Олгоогүй'}
               </div>
+            )}
+            {isAdmin && (
+              <TextColorPicker userId={row.user.id} current={row.user.textColor} onPick={(id, color) => void setColor(id, color)} />
             )}
           </div>
           <div className="member-actions">
