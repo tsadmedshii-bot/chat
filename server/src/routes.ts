@@ -901,3 +901,34 @@ router.post('/admin/users/:id/text-color', requireAuth, requireAdmin, ah(async (
   const updated = await db.update(users).set({ textColor: color }).where(eq(users.id, id)).returning();
   res.json({ user: publicUser(updated[0]) });
 }));
+
+// ---------------------------------------------------------------- хэрэглэгч устгах (зөвхөн том админ)
+// Өөрийн профайлыг устгах (DELETE /api/me) үйлдэлтэй яг ижил
+// каскадыг тухайн хэрэглэгчид хэрэглэнэ: сесс, пост, сэтгэгдэл,
+// таалагдсан, өрөөний мессеж, хувь чат, зөвшөөрөл, бангийн түүх,
+// дараа нь хэрэглэгчийн мөр. Том админ өөрийгөө устгаж болохгүй —
+// чат админгүй үлдэнэ.
+
+router.delete('/admin/users/:id', requireAuth, requireAdmin, ah(async (req, res) => {
+  const u = req.user as AuthUser;
+  const id = parseId(req, 'Хэрэглэгч олдсонгүй');
+  if (id === u.id) {
+    throw new HttpError(400, 'Том админ өөрийн профайлыг устгах боломжгүй');
+  }
+  const rows = await db.select().from(users).where(eq(users.id, id)).limit(1);
+  if (!rows[0]) throw new HttpError(404, 'Хэрэглэгч олдсонгүй');
+  await db.transaction(async (tx) => {
+    await tx.delete(sessions).where(eq(sessions.userId, id));
+    await tx.delete(postLikes).where(eq(postLikes.userId, id));
+    await tx.delete(postComments).where(eq(postComments.authorId, id));
+    // Тухайн хэрэглэгчийн постууд дээрх бусдын like/сэтгэгдэл cascade-аар арилна.
+    await tx.delete(posts).where(eq(posts.authorId, id));
+    await tx.delete(messages).where(eq(messages.authorId, id));
+    await tx.delete(directMessages).where(or(eq(directMessages.senderId, id), eq(directMessages.recipientId, id)));
+    await tx.delete(dmReads).where(or(eq(dmReads.userId, id), eq(dmReads.partnerId, id)));
+    await tx.delete(roomAccess).where(eq(roomAccess.userId, id));
+    await tx.delete(banLogs).where(or(eq(banLogs.userId, id), eq(banLogs.bannedById, id), eq(banLogs.unbannedById, id)));
+    await tx.delete(users).where(eq(users.id, id));
+  });
+  res.status(204).send();
+}));
