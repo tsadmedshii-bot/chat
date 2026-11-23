@@ -4,6 +4,7 @@ import {
   ApiError,
   adminApproveAccess,
   adminBanUser,
+  adminDeleteUser,
   adminDenyAccess,
   adminGrantBanPermission,
   adminGrantModerator,
@@ -116,6 +117,7 @@ export default function Members({
   const [requests, setRequests] = useState<AccessRequest[]>([]);
   const [banLogs, setBanLogs] = useState<BanLog[]>([]);
   const [banTargetId, setBanTargetId] = useState<number | null>(null);
+  const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   // Хуудас нээгдэх бүрд өөрийн эрхийг серверээс дахин авна: нэвтэрсэн
@@ -283,6 +285,18 @@ export default function Members({
     }
   }
 
+  async function deleteUser(id: number, name: string): Promise<void> {
+    setError('');
+    try {
+      await adminDeleteUser(id);
+      setNotice(`«${name}» хэрэглэгчийн аккоунтийг устгалаа.`);
+      setDeleteTargetId(null);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Алдаа гарлаа.');
+    }
+  }
+
   return (
     <div className="members">
       <h2>{isAdmin ? '👑 Том админ — Гишүүд' : '⚔️🛡️ Жижиг админ — Гишүүд'}</h2>
@@ -428,6 +442,31 @@ export default function Members({
                   Жижиг админ эрхийг хураах
                 </button>
               </>
+            )}
+            {isAdmin && row.user.id !== viewer.id && (
+              deleteTargetId === row.user.id ? (
+                <span className="ban-chooser">
+                  <span className="muted small">Аккоунт, пост, мессеж, хувь чат нь үүрд устах болно.</span>
+                  <button
+                    type="button"
+                    className="btn-danger-ghost small"
+                    onClick={() => void deleteUser(row.user.id, row.user.name)}
+                  >
+                    Тийм, устгах
+                  </button>
+                  <button type="button" className="btn-ghost small" onClick={() => setDeleteTargetId(null)}>
+                    Цуцлах
+                  </button>
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  className="btn-danger-ghost small"
+                  onClick={() => setDeleteTargetId(row.user.id)}
+                >
+                  🗑️ Устгах
+                </button>
+              )
             )}
             {canBanRow(row) &&
               (isBannedUser(row.user) ? (
