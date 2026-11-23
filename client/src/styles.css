@@ -1185,6 +1185,47 @@ img.avatar {
   word-break: break-word;
 }
 
+/* Том админы бичлэг — Playfair Display (Кирилл + Латин) гоёмсог фонт.
+   Ачаалагдахгүй бол Georgia/Times New Roman serif рүү унана. */
+.message-admin {
+  font-family: 'Playfair Display', Georgia, 'Times New Roman', serif;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+/* Бичлэгийн өнгө сонгогч (зөвхөн том админ — «Гишүүд» хуудас). */
+.color-picker {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.color-swatch {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+}
+
+.color-swatch.active {
+  border-color: #fff;
+  outline: 2px solid var(--muted);
+  outline-offset: 1px;
+}
+
+.color-picker input[type='color'] {
+  width: 28px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
 .message-time {
   color: var(--muted);
   font-size: 0.75rem;
