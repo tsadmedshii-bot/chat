@@ -158,7 +158,7 @@ export default function App() {
         {view === 'profile' && <Profile user={user} onUserChange={setUser} onAccountDeleted={handleLogout} />}
       </main>
       {profileUserId !== null && (
-        <ProfileModal userId={profileUserId} meId={user.id} onClose={() => setProfileUserId(null)} onOpenDm={openDm} />
+        <ProfileModal userId={profileUserId} viewer={user} onClose={() => setProfileUserId(null)} onOpenDm={openDm} onUserChange={setUser} />
       )}
       <footer className="site-footer">
         <div className="container">
