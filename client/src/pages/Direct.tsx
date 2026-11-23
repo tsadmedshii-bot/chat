@@ -122,32 +122,45 @@ export default function Direct({
         <h2>💬 Хувь чат</h2>
         <p className="muted small">Хэнтэй ч зөвшөөрөлгүйгээр хувь чат бичиж болно.</p>
         {conversations.length === 0 && <p className="empty">Одоохондоо өөр хэрэглэгч алга.</p>}
-        {conversations.map((c) => (
-          <div
-            key={c.user.id}
-            role="button"
-            tabIndex={0}
-            className={selectedId === c.user.id ? 'dm-item active' : 'dm-item'}
-            onClick={() => selectPartner(c.user.id)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                selectPartner(c.user.id);
-              }
-            }}
-          >
-            <Avatar user={c.user} size="small" showDot onClick={() => onViewProfile(c.user.id)} />
-            <span className="dm-item-main">
-              <span className="dm-item-name">{c.user.name}</span>
-              <span className="dm-item-preview">
-                {c.lastMessage
-                  ? `${c.lastMessage.senderId === user.id ? 'Та: ' : ''}${c.lastMessage.content}`
-                  : 'Одоохондоо мессеж алга'}
+        {conversations.map((c) => {
+          // Сүүлийн мессежийг бичсэн хүн — би эсвэл ярилцагч; түүний өнгө/фонтыг
+          // урьдчилан харуулахад хэрэглэнэ.
+          const previewSender =
+            c.lastMessage && c.lastMessage.senderId === user.id ? user : c.user;
+          return (
+            <div
+              key={c.user.id}
+              role="button"
+              tabIndex={0}
+              className={selectedId === c.user.id ? 'dm-item active' : 'dm-item'}
+              onClick={() => selectPartner(c.user.id)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  selectPartner(c.user.id);
+                }
+              }}
+            >
+              <Avatar user={c.user} size="small" showDot onClick={() => onViewProfile(c.user.id)} />
+              <span className="dm-item-main">
+                <span className="dm-item-name">{c.user.name}</span>
+                <span
+                  className={
+                    c.lastMessage && previewSender.role === 'admin'
+                      ? 'dm-item-preview message-admin'
+                      : 'dm-item-preview'
+                  }
+                  style={c.lastMessage && previewSender.textColor ? { color: previewSender.textColor } : undefined}
+                >
+                  {c.lastMessage
+                    ? `${c.lastMessage.senderId === user.id ? 'Та: ' : ''}${c.lastMessage.content}`
+                    : 'Одоохондоо мессеж алга'}
+                </span>
               </span>
-            </span>
-            {c.unreadCount > 0 && <span className="unread-badge">{c.unreadCount}</span>}
-          </div>
-        ))}
+              {c.unreadCount > 0 && <span className="unread-badge">{c.unreadCount}</span>}
+            </div>
+          );
+        })}
       </div>
 
       <div className="dm-thread">
@@ -166,19 +179,27 @@ export default function Direct({
             {error && <p className="error">{error}</p>}
             <div className="dm-message-list">
               {messages.length === 0 && <p className="empty">Одоохондоо мессеж алга — хамгийн түрүүнд та бичээрэй! ✨</p>}
-              {messages.map((m) => (
-                <div key={m.id} className={m.senderId === user.id ? 'dm-message mine' : 'dm-message'}>
-                  <p>{m.content}</p>
-                  <span className="message-time">
-                    {new Date(m.createdAt).toLocaleString('mn-MN', { hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                  {canDelete(m) && (
-                    <button type="button" className="btn-danger-ghost small" onClick={() => void onDelete(m)}>
-                      ✕
-                    </button>
-                  )}
-                </div>
-              ))}
+              {messages.map((m) => {
+                const sender = m.senderId === user.id ? user : selected.user;
+                return (
+                  <div key={m.id} className={m.senderId === user.id ? 'dm-message mine' : 'dm-message'}>
+                    <p
+                      className={sender.role === 'admin' ? 'message-admin' : undefined}
+                      style={sender.textColor ? { color: sender.textColor } : undefined}
+                    >
+                      {m.content}
+                    </p>
+                    <span className="message-time">
+                      {new Date(m.createdAt).toLocaleString('mn-MN', { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                    {canDelete(m) && (
+                      <button type="button" className="btn-danger-ghost small" onClick={() => void onDelete(m)}>
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
               <div ref={bottomRef} />
             </div>
             <form className="message-form" onSubmit={submit}>
@@ -191,7 +212,7 @@ export default function Direct({
                 Илгээх
               </button>
             </form>
-            <p className="muted small">💬 Мессежүүд 5 минутын дараа автоматаар устах болно.</p>
+            <p className="muted small">💬 Мессежүүд 15 минутын дараа автоматаар устах болно.</p>
           </>
         )}
       </div>
