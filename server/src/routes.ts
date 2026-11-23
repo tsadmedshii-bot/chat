@@ -22,13 +22,13 @@ function isOnline(lastSeenAt: Date | null): boolean {
   return Date.now() - lastSeenAt.getTime() <= ONLINE_WINDOW_MS;
 }
 
-function publicUser(row: { id: number; name: string; username: string; role: string; banned: boolean; bannedUntil: Date | null; canBan: boolean; avatar: string | null; lastSeenAt: Date | null; createdAt: Date }): User {
-  return { id: row.id, name: row.name, username: row.username, role: row.role as Role, banned: row.banned, bannedUntil: row.bannedUntil ? toIso(row.bannedUntil) : null, canBan: row.canBan, avatar: row.avatar ?? null, lastSeenAt: row.lastSeenAt ? toIso(row.lastSeenAt) : null, online: isOnline(row.lastSeenAt), createdAt: toIso(row.createdAt) };
+function publicUser(row: { id: number; name: string; username: string; role: string; banned: boolean; bannedUntil: Date | null; canBan: boolean; avatar: string | null; textColor: string | null; lastSeenAt: Date | null; createdAt: Date }): User {
+  return { id: row.id, name: row.name, username: row.username, role: row.role as Role, banned: row.banned, bannedUntil: row.bannedUntil ? toIso(row.bannedUntil) : null, canBan: row.canBan, avatar: row.avatar ?? null, textColor: row.textColor ?? null, lastSeenAt: row.lastSeenAt ? toIso(row.lastSeenAt) : null, online: isOnline(row.lastSeenAt), createdAt: toIso(row.createdAt) };
 }
 
 /** Устгагдсан хэрэглэгчийн оронд харуулдаг орлуулагч. */
 function deletedUser(authorId: number, createdAt: Date): User {
-  return { id: authorId, name: 'Устгасан хэрэглэгч', username: '', role: 'member' as Role, banned: false, bannedUntil: null, canBan: false, avatar: null, lastSeenAt: null, online: false, createdAt: toIso(createdAt) };
+  return { id: authorId, name: 'Устгасан хэрэглэгч', username: '', role: 'member' as Role, banned: false, bannedUntil: null, canBan: false, avatar: null, textColor: null, lastSeenAt: null, online: false, createdAt: toIso(createdAt) };
 }
 
 function toDirectMessage(row: { id: number; senderId: number; recipientId: number; content: string; createdAt: Date }): DirectMessage {
@@ -882,4 +882,22 @@ router.post('/admin/users/:id/ban-permission', requireAuth, requireAdmin, ah(asy
 router.post('/admin/users/:id/revoke-ban-permission', requireAuth, requireAdmin, ah(async (req, res) => {
   const user = await setBanPermission(parseId(req, 'Хэрэглэгч олдсонгүй'), false);
   res.json({ user });
+}));
+
+// ---------------------------------------------------------------- бичлэгийн өнгө
+// Зөвхөн том админ хэрэглэгчид бичлэгийн өнгө онооно. Өнгө нь '#RRGGBB'
+// хэлбэртэй байх ёстой; null илгээхэд өнгө арилна.
+
+const COLOR_RE = /^#[0-9a-fA-F]{6}$/;
+
+router.post('/admin/users/:id/text-color', requireAuth, requireAdmin, ah(async (req, res) => {
+  const id = parseId(req, 'Хэрэглэгч олдсонгүй');
+  const color: unknown = req.body?.color;
+  if (color !== null && (typeof color !== 'string' || !COLOR_RE.test(color))) {
+    throw new HttpError(400, 'Өнгө нь #RRGGBB хэлбэртэй байх ёстой (жишээ нь #D4AF37)');
+  }
+  const rows = await db.select().from(users).where(eq(users.id, id)).limit(1);
+  if (!rows[0]) throw new HttpError(404, 'Хэрэглэгч олдсонгүй');
+  const updated = await db.update(users).set({ textColor: color }).where(eq(users.id, id)).returning();
+  res.json({ user: publicUser(updated[0]) });
 }));
