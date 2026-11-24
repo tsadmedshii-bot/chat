@@ -24,6 +24,10 @@ export default function Direct({
   const [editDraft, setEditDraft] = useState('');
   const [error, setError] = useState('');
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const firstLoadRef = useRef(true);
+  // Өөрөө мессеж илгээхэд заавал доош гүйлгэнэ (Rooms-той ижил дүрэм).
+  const forceScrollRef = useRef(false);
 
   const refreshConversations = useCallback(async () => {
     try {
@@ -79,8 +83,19 @@ export default function Direct({
     onPartnerOpened();
   }, [initialPartnerId, loadThread, onPartnerOpened]);
 
+  // Шинэ мессеж ирэхэд: шинэ thread нээх, эсвэл өөрөө илгээсэн бол заавал
+  // доош гүйлгэнэ; бусдын мессеж ирэхэд зөвхөн доод талд нь байвал дагана —
+  // хэрэглэгч дээш гүйлгэж хуучин мессеж уншиж байхад нь тасалдуулахгүй.
+  // (Өмнө нь мессеж болгон дээр нөхцөлгүй гүйлгэдэг байсан — хуучин мессеж
+  // уншиж байхад ч доош нь татдаг байсан.)
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const el = listRef.current;
+    if (!el) return;
+    const force = forceScrollRef.current;
+    forceScrollRef.current = false;
+    const nearBottom = firstLoadRef.current || force || el.scrollHeight - el.scrollTop - el.clientHeight < 150;
+    firstLoadRef.current = false;
+    if (nearBottom) bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
   const selected = conversations.find((c) => c.user.id === selectedId) ?? null;
@@ -94,6 +109,7 @@ export default function Direct({
     setMessages([]);
     setReplyTo(null);
     setEditingId(null);
+    firstLoadRef.current = true;
     void loadThread(partnerId);
   }
 
@@ -103,6 +119,7 @@ export default function Direct({
     setError('');
     try {
       const msg = await sendDm(selectedId, draft.trim(), replyTo?.id ?? null);
+      forceScrollRef.current = true;
       setMessages((prev) => [...prev, msg]);
       setDraft('');
       setReplyTo(null);
@@ -210,7 +227,7 @@ export default function Direct({
               </div>
             </div>
             {error && <p className="error">{error}</p>}
-            <div className="dm-message-list">
+            <div className="dm-message-list" ref={listRef}>
               {messages.length === 0 && <p className="empty">Одоохондоо мессеж алга — хамгийн түрүүнд та бичээрэй! ✨</p>}
               {messages.map((m) => {
                 const sender = m.senderId === user.id ? user : selected.user;
