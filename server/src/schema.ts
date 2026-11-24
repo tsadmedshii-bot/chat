@@ -12,6 +12,12 @@ export const users = pgTable('users', {
   bannedUntil: timestamp('banned_until'),
   /** Жижиг админд бандах эрх олгосон эсэх — зөвхөн том админ асааж/унтраана. Анхдагчаар false. */
   canBan: boolean('can_ban').notNull().default(false),
+  /** Жижиг админд өнгө/фонт сонгох эрх олгосон эсэх — зөвхөн том админ
+      асааж/унтраана, зөвхөн жижиг админд (moderator) хамаарна. */
+  canStyle: boolean('can_style').notNull().default(false),
+  /** Жижиг админы сонгосон фонтын түлхүүр (жишээ нь 'lobster') —
+      NULL = энгийн фонт. Эрх хураагдсан үед ч утга нь хадгалагдана. */
+  textFont: text('text_font'),
   /** Сүүлд идэвхтэй байсан цаг — heartbeat / нэвтрэлт / бүртгэлээс шинэчлэгдэнэ. */
   lastSeenAt: timestamp('last_seen_at'),
   /** Профайл зураг — data URL (JPEG/PNG/WebP, 500 KB хүртэл). */
