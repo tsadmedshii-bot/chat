@@ -43,7 +43,7 @@ export default function Auth({ onDone }: { onDone: (user: User) => void }) {
         <div className="auth-logo">💬</div>
         <h1>Чат</h1>
         <p className="auth-sub">
-          Пост оруулж, 2 өрөөнд чатлаарай.
+          Пост оруулж, нийтийн чатанд чатлаарай.
           <br />
           Хамгийн түрүүнд бүртгүүлсэн хүн 👑 том админ болно.
         </p>
