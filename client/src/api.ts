@@ -255,6 +255,25 @@ export async function adminRevokeBanPermission(userId: number): Promise<User> {
   return unwrapOne(data);
 }
 
+/** Жижиг админд өнгө/фонт сонгох эрх олгох — зөвхөн том админ. */
+export async function adminGrantStylePermission(userId: number): Promise<User> {
+  const data = await api<User | { user: User }>(`/api/admin/users/${userId}/style-permission`, { method: 'POST' });
+  return unwrapOne(data);
+}
+
+/** Жижиг админы өнгө/фонт сонгох эрхийг хураах — зөвхөн том админ. */
+export async function adminRevokeStylePermission(userId: number): Promise<User> {
+  const data = await api<User | { user: User }>(`/api/admin/users/${userId}/revoke-style-permission`, { method: 'POST' });
+  return unwrapOne(data);
+}
+
+/** Өөрийн бичлэгийн өнгө, фонт сонгох (color: '#RRGGBB' эсвэл null,
+    font: 7 фонтын түлхүүр эсвэл null) — зөвхөн canStyle эрхтэй жижиг админ. */
+export async function setMyStyle(color: string | null, font: string | null): Promise<User> {
+  const data = await api<User | { user: User }>('/api/me/style', jsonBody({ color, font }));
+  return unwrapOne(data);
+}
+
 /** Бичлэгийн өнгө оноох / арилгах (color: '#RRGGBB' эсвэл null) — зөвхөн том админ. */
 export async function setTextColor(userId: number, color: string | null): Promise<User> {
   const data = await api<User | { user: User }>(
