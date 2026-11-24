@@ -2,6 +2,7 @@
 // хариулах, өөрийн мессеж засах, эможи урвал боломжтой.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ChatMessage, User } from '../../../shared/src/types';
+import { SYSTEM_NAME } from '../../../shared/src/types';
 import { ApiError, deleteMessage, editMessage, listMessages, sendMessage, toggleReaction } from '../api';
 import EmojiPicker from '../components/EmojiPicker';
 import { EditedMark, ReactionBar, ReplyQuoteView, authorFontClass } from '../components/MessageParts';
@@ -61,8 +62,11 @@ export default function Rooms({ user, onViewProfile }: { user: User; onViewProfi
     }
   }, [messages]);
 
-  const canDelete = (m: ChatMessage): boolean =>
-    m.author.id === user.id || user.role === 'admin' || user.role === 'moderator';
+  const canDelete = (m: ChatMessage): boolean => {
+    // Угтах мессеж — зөвхөн админ (том/жижиг) устгаж болно (зохиогч байхгүй).
+    if (m.kind === 'welcome') return user.role === 'admin' || user.role === 'moderator';
+    return m.author !== null && (m.author.id === user.id || user.role === 'admin' || user.role === 'moderator');
+  };
 
   async function submit(e: React.FormEvent): Promise<void> {
     e.preventDefault();
@@ -127,67 +131,96 @@ export default function Rooms({ user, onViewProfile }: { user: User; onViewProfi
 
       <div className="message-list chat-list" ref={listRef}>
         {messages.length === 0 && <p className="empty">Одоохондоо мессеж алга — хамгийн түрүүнд та бичээрэй! ✨</p>}
-        {messages.map((m) => (
-          <div key={m.id} className={m.author.id === user.id ? 'message mine' : 'message'}>
-            <Avatar user={m.author} showDot onClick={() => onViewProfile(m.author.id)} />
-            <div className="message-body">
-              <UserName user={m.author} />
-              {m.replyTo && <ReplyQuoteView quote={m.replyTo} />}
-              {editingId === m.id ? (
-                <div className="edit-box">
-                  <textarea
-                    value={editDraft}
-                    onChange={(e) => setEditDraft(e.target.value)}
-                    rows={2}
-                    autoFocus
-                  />
-                  <div className="edit-actions">
-                    <button type="button" className="btn-primary small" onClick={() => void saveEdit(m)} disabled={!editDraft.trim()}>
-                      Хадгалах
-                    </button>
-                    <button type="button" className="btn-ghost small" onClick={() => setEditingId(null)}>
-                      Цуцлах
-                    </button>
-                  </div>
+        {messages.map((m) => {
+          // Угтах мессеж — төвд, аватаргүй, дулаан баярын загвартай.
+          // Засах товч байхгүй (зохиогч байхгүй), урвал + хариулах боломжтой.
+          if (m.kind === 'welcome') {
+            return (
+              <div key={m.id} className="message welcome-message">
+                <div className="welcome-body">
+                  <span className="welcome-text">{m.content}</span>
+                  <span className="message-time">
+                    {new Date(m.createdAt).toLocaleString('mn-MN', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                  <ReactionBar reactions={m.reactions} onToggle={(e) => void onReact(m, e)} />
                 </div>
-              ) : (
-                <p
-                  className={authorFontClass(m.author)}
-                  style={m.author.textColor ? { color: m.author.textColor } : undefined}
-                >
-                  {m.content}
-                </p>
-              )}
-              <span className="message-time">
-                {new Date(m.createdAt).toLocaleString('mn-MN', { hour: '2-digit', minute: '2-digit' })}
-                <EditedMark editedAt={m.editedAt} />
-              </span>
-              <ReactionBar reactions={m.reactions} onToggle={(e) => void onReact(m, e)} />
-            </div>
-            <div className="message-actions">
-              <button type="button" className="btn-ghost small" onClick={() => setReplyTo(m)} title="Хариулах">
-                ↩️
-              </button>
-              {m.author.id === user.id && editingId !== m.id && (
-                <button type="button" className="btn-ghost small" onClick={() => startEdit(m)} title="Засах">
-                  ✏️
+                <div className="message-actions">
+                  <button type="button" className="btn-ghost small" onClick={() => setReplyTo(m)} title="Хариулах">
+                    ↩️
+                  </button>
+                  {canDelete(m) && (
+                    <button type="button" className="btn-danger-ghost small" onClick={() => void onDelete(m)} title="Устгах">
+                      ✕
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          }
+          const author = m.author;
+          if (!author) return null;
+          return (
+            <div key={m.id} className={author.id === user.id ? 'message mine' : 'message'}>
+              <Avatar user={author} showDot onClick={() => onViewProfile(author.id)} />
+              <div className="message-body">
+                <UserName user={author} />
+                {m.replyTo && <ReplyQuoteView quote={m.replyTo} />}
+                {editingId === m.id ? (
+                  <div className="edit-box">
+                    <textarea
+                      value={editDraft}
+                      onChange={(e) => setEditDraft(e.target.value)}
+                      rows={2}
+                      autoFocus
+                    />
+                    <div className="edit-actions">
+                      <button type="button" className="btn-primary small" onClick={() => void saveEdit(m)} disabled={!editDraft.trim()}>
+                        Хадгалах
+                      </button>
+                      <button type="button" className="btn-ghost small" onClick={() => setEditingId(null)}>
+                        Цуцлах
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <p
+                    className={authorFontClass(author)}
+                    style={author.textColor ? { color: author.textColor } : undefined}
+                  >
+                    {m.content}
+                  </p>
+                )}
+                <span className="message-time">
+                  {new Date(m.createdAt).toLocaleString('mn-MN', { hour: '2-digit', minute: '2-digit' })}
+                  <EditedMark editedAt={m.editedAt} />
+                </span>
+                <ReactionBar reactions={m.reactions} onToggle={(e) => void onReact(m, e)} />
+              </div>
+              <div className="message-actions">
+                <button type="button" className="btn-ghost small" onClick={() => setReplyTo(m)} title="Хариулах">
+                  ↩️
                 </button>
-              )}
-              {canDelete(m) && (
-                <button type="button" className="btn-danger-ghost small" onClick={() => void onDelete(m)} title="Устгах">
-                  ✕
-                </button>
-              )}
+                {author.id === user.id && editingId !== m.id && (
+                  <button type="button" className="btn-ghost small" onClick={() => startEdit(m)} title="Засах">
+                    ✏️
+                  </button>
+                )}
+                {canDelete(m) && (
+                  <button type="button" className="btn-danger-ghost small" onClick={() => void onDelete(m)} title="Устгах">
+                    ✕
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
         <div ref={bottomRef} />
       </div>
 
       {replyTo && (
         <div className="reply-bar">
           <span>
-            ↩️ <strong>{replyTo.author.name}</strong>-д хариулах: {replyTo.content.length > 80 ? `${replyTo.content.slice(0, 80)}…` : replyTo.content}
+            ↩️ <strong>{replyTo.author?.name ?? SYSTEM_NAME}</strong>-д хариулах: {replyTo.content.length > 80 ? `${replyTo.content.slice(0, 80)}…` : replyTo.content}
           </span>
           <button type="button" className="btn-ghost small" onClick={() => setReplyTo(null)} title="Цуцлах">
             ✕
@@ -210,7 +243,7 @@ export default function Rooms({ user, onViewProfile }: { user: User; onViewProfi
       {showEmoji && (
         <EmojiPicker onPick={(e) => setDraft((d) => d + e)} onClose={() => setShowEmoji(false)} />
       )}
-      <p className="muted small">💬 Мессежүүд 15 минутын дараа автоматаар устах болно. Постууд устахгүй.</p>
+      <p className="muted small">💬 Мессежүүд 15 минутын дараа, угтах мессеж 1 цагийн дараа автоматаар устах болно. Постууд устахгүй.</p>
     </div>
   );
 }
