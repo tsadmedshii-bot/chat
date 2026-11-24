@@ -6,9 +6,11 @@ import {
   adminDeleteUser,
   adminGrantBanPermission,
   adminGrantModerator,
+  adminGrantStylePermission,
   adminListMembers,
   adminRevokeBanPermission,
   adminRevokeModerator,
+  adminRevokeStylePermission,
   adminUnbanUser,
   getBanLogs,
   me,
@@ -130,7 +132,7 @@ export default function Members({
         if (cancelled) return;
         setFreshUser(fresh);
         // Эрх нь өөрчлөгдсөн бол дээд түвшний төлөвийг ч шинэчилнэ.
-        if (onUserChange && (fresh.role !== user.role || fresh.canBan !== user.canBan)) {
+        if (onUserChange && (fresh.role !== user.role || fresh.canBan !== user.canBan || fresh.canStyle !== user.canStyle)) {
           onUserChange(fresh);
         }
       })
@@ -249,6 +251,28 @@ export default function Members({
     }
   }
 
+  async function grantStylePermission(id: number): Promise<void> {
+    setError('');
+    try {
+      await adminGrantStylePermission(id);
+      setNotice('Жижиг админд өнгө/фонт сонгох эрх олголоо. 🎨');
+      await refresh();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Алдаа гарлаа.');
+    }
+  }
+
+  async function revokeStylePermission(id: number): Promise<void> {
+    setError('');
+    try {
+      await adminRevokeStylePermission(id);
+      setNotice('Жижиг админы өнгө/фонт сонгох эрхийг хураалаа.');
+      await refresh();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Алдаа гарлаа.');
+    }
+  }
+
   async function setColor(id: number, color: string | null): Promise<void> {
     setError('');
     try {
@@ -277,7 +301,7 @@ export default function Members({
       <h2>{isAdmin ? '👑 Том админ — Гишүүд' : '⚔️🛡️ Жижиг админ — Гишүүд'}</h2>
       <p className="muted">
         {isAdmin
-          ? 'Зөвхөн та том админ. Жижиг админ (⚔️🛡️) нь бусдын пост, мессежийг устгаж чадна; бандах эрхийг та тусад нь олгоно.'
+          ? 'Зөвхөн та том админ. Жижиг админ (⚔️🛡️) нь бусдын пост, мессежийг устгаж чадна; бандах эрх болон өнгө/фонт сонгох эрхийг та тусад нь олгоно.'
           : 'Танд бандах эрх олгосон тул гишүүдийг харж, энгийн хэрэглэгчийг бандаж болно.'}
       </p>
       {error && <p className="error">{error}</p>}
@@ -361,6 +385,8 @@ export default function Members({
             {row.user.role === 'moderator' && (
               <div className="muted small">
                 Бандах эрх: {row.user.canBan ? 'Олгосон ✅' : 'Олгоогүй'}
+                <br />
+                🎨 Өнгө/фонт: {row.user.canStyle ? 'Олгосон ✅' : 'Олгоогүй'}
               </div>
             )}
             {isAdmin && (
@@ -387,6 +413,15 @@ export default function Members({
                 ) : (
                   <button type="button" className="btn-ghost small" onClick={() => void grantBanPermission(row.user.id)}>
                     🚫 Бандах эрх олгох
+                  </button>
+                )}
+                {row.user.canStyle ? (
+                  <button type="button" className="btn-ghost small" onClick={() => void revokeStylePermission(row.user.id)}>
+                    🎨 Эрх хураах
+                  </button>
+                ) : (
+                  <button type="button" className="btn-ghost small" onClick={() => void grantStylePermission(row.user.id)}>
+                    🎨 Өнгө/фонт эрх олгох
                   </button>
                 )}
                 <button type="button" className="btn-danger-ghost small" onClick={() => void revoke(row.user.id)}>
