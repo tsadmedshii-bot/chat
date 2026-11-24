@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DirectConversation, DirectMessage, User } from '../../../shared/src/types';
 import { ApiError, deleteDm, editDm, listDmConversations, listDmMessages, sendDm, toggleReaction } from '../api';
-import { EditedMark, ReactionBar, ReplyQuoteView } from '../components/MessageParts';
+import { EditedMark, ReactionBar, ReplyQuoteView, authorFontClass } from '../components/MessageParts';
 import { Avatar } from '../components/UserBadge';
 
 export default function Direct({
@@ -178,6 +178,7 @@ export default function Direct({
           // урьдчилан харуулахад хэрэглэнэ.
           const previewSender =
             c.lastMessage && c.lastMessage.senderId === user.id ? user : c.user;
+          const previewFont = c.lastMessage ? authorFontClass(previewSender) : undefined;
           return (
             <div
               key={c.user.id}
@@ -196,11 +197,7 @@ export default function Direct({
               <span className="dm-item-main">
                 <span className="dm-item-name">{c.user.name}</span>
                 <span
-                  className={
-                    c.lastMessage && previewSender.role === 'admin'
-                      ? 'dm-item-preview message-admin'
-                      : 'dm-item-preview'
-                  }
+                  className={previewFont ? `dm-item-preview ${previewFont}` : 'dm-item-preview'}
                   style={c.lastMessage && previewSender.textColor ? { color: previewSender.textColor } : undefined}
                 >
                   {c.lastMessage
@@ -255,7 +252,7 @@ export default function Direct({
                         </div>
                       ) : (
                         <p
-                          className={sender.role === 'admin' ? 'message-admin' : undefined}
+                          className={authorFontClass(sender)}
                           style={sender.textColor ? { color: sender.textColor } : undefined}
                         >
                           {m.content}
