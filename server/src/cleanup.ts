@@ -21,6 +21,16 @@ export interface CleanupResult {
 export async function runCleanup(): Promise<CleanupResult> {
   const msg = await db.execute(sql.raw(`DELETE FROM messages WHERE created_at < now() - ${MESSAGE_TTL}`));
   const dm = await db.execute(sql.raw(`DELETE FROM direct_messages WHERE created_at < now() - ${MESSAGE_TTL}`));
+  // Устсан мессеж/сэтгэгдэл дээр үлдсэн өнчин урвалуудыг арилгана.
+  await db.execute(
+    sql.raw(`DELETE FROM reactions WHERE target_type = 'message' AND target_id NOT IN (SELECT id FROM messages)`),
+  );
+  await db.execute(
+    sql.raw(`DELETE FROM reactions WHERE target_type = 'dm' AND target_id NOT IN (SELECT id FROM direct_messages)`),
+  );
+  await db.execute(
+    sql.raw(`DELETE FROM reactions WHERE target_type = 'comment' AND target_id NOT IN (SELECT id FROM post_comments)`),
+  );
   // Хугацаа нь дууссан банг олж, нэг мэдэгдэлд (CTE) тайлж түүхийг тэмдэглэнэ.
   // JS массивыг ANY($1) руу дамжуулах нь pg драйверт "malformed array literal"
   // алдаа өгдөг нь батлагдсан тул массив параметр ашиглахгүй.
