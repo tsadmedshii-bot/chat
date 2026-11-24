@@ -7,7 +7,7 @@ import { directMessages, dmReads, messages, postComments, postLikes, posts, reac
 import type { AuthUser } from './auth';
 import { createSession, deleteSession, HttpError, banMessage, isBannedNow, registerUser, requireAdmin, requireAuth, verifyPassword } from './auth';
 import type { BanLog, ChatMessage, DirectConversation, DirectMessage, MemberRow, Post, PostComment, ReactionCount, ReactionTargetType, ReplyQuote, Role, Room, User } from '../../shared/src/types';
-import { REACTION_EMOJIS } from '../../shared/src/types';
+import { REACTION_EMOJIS, TEXT_FONT_KEYS } from '../../shared/src/types';
 
 export const router = Router();
 
@@ -23,13 +23,13 @@ function isOnline(lastSeenAt: Date | null): boolean {
   return Date.now() - lastSeenAt.getTime() <= ONLINE_WINDOW_MS;
 }
 
-function publicUser(row: { id: number; name: string; username: string; role: string; banned: boolean; bannedUntil: Date | null; canBan: boolean; avatar: string | null; textColor: string | null; lastSeenAt: Date | null; createdAt: Date }): User {
-  return { id: row.id, name: row.name, username: row.username, role: row.role as Role, banned: row.banned, bannedUntil: row.bannedUntil ? toIso(row.bannedUntil) : null, canBan: row.canBan, avatar: row.avatar ?? null, textColor: row.textColor ?? null, lastSeenAt: row.lastSeenAt ? toIso(row.lastSeenAt) : null, online: isOnline(row.lastSeenAt), createdAt: toIso(row.createdAt) };
+function publicUser(row: { id: number; name: string; username: string; role: string; banned: boolean; bannedUntil: Date | null; canBan: boolean; canStyle: boolean; avatar: string | null; textColor: string | null; textFont: string | null; lastSeenAt: Date | null; createdAt: Date }): User {
+  return { id: row.id, name: row.name, username: row.username, role: row.role as Role, banned: row.banned, bannedUntil: row.bannedUntil ? toIso(row.bannedUntil) : null, canBan: row.canBan, canStyle: row.canStyle, avatar: row.avatar ?? null, textColor: row.textColor ?? null, textFont: row.canStyle ? (row.textFont ?? null) : null, lastSeenAt: row.lastSeenAt ? toIso(row.lastSeenAt) : null, online: isOnline(row.lastSeenAt), createdAt: toIso(row.createdAt) };
 }
 
 /** Устгагдсан хэрэглэгчийн оронд харуулдаг орлуулагч. */
 function deletedUser(authorId: number, createdAt: Date): User {
-  return { id: authorId, name: 'Устгасан хэрэглэгч', username: '', role: 'member' as Role, banned: false, bannedUntil: null, canBan: false, avatar: null, textColor: null, lastSeenAt: null, online: false, createdAt: toIso(createdAt) };
+  return { id: authorId, name: 'Устгасан хэрэглэгч', username: '', role: 'member' as Role, banned: false, bannedUntil: null, canBan: false, canStyle: false, avatar: null, textColor: null, textFont: null, lastSeenAt: null, online: false, createdAt: toIso(createdAt) };
 }
 
 function toDirectMessage(row: { id: number; senderId: number; recipientId: number; content: string; replyAuthorName: string | null; replyText: string | null; editedAt: Date | null; createdAt: Date }, reactionRows: { targetType: string; targetId: number; emoji: string; userId: number }[], meId: number): DirectMessage {
@@ -893,10 +893,11 @@ async function setModerator(id: number, role: 'moderator' | 'member'): Promise<U
   if (rows[0].role === 'admin') {
     throw new HttpError(400, 'Том админы эрхийг өөрчлөх боломжгүй');
   }
-  // Жижиг админ эрхийг хураахад бандах эрх нь ч хамт арилна.
+  // Жижиг админ эрхийг хураахад бандах эрх болон өнгө/фонт сонгох эрх нь
+  // ч хамт арилна.
   const updated = await db
     .update(users)
-    .set({ role, canBan: role === 'member' ? false : rows[0].canBan })
+    .set({ role, canBan: role === 'member' ? false : rows[0].canBan, canStyle: role === 'member' ? false : rows[0].canStyle })
     .where(eq(users.id, id))
     .returning();
   return publicUser(updated[0]);
@@ -1101,6 +1102,30 @@ router.post('/admin/users/:id/revoke-ban-permission', requireAuth, requireAdmin,
   res.json({ user });
 }));
 
+// ---------------------------------------------------------------- өнгө/фонт сонгох эрх (зөвхөн том админ, зөвхөн жижиг админд)
+// Бандах эрхтэй яг ижил загвар: тусад нь олгоно/хураана. Эрхгүй жижиг
+// админ өөрийн өнгө, фонтыг өөрөө сонгож чадахгүй.
+
+async function setStylePermission(id: number, canStyle: boolean): Promise<User> {
+  const rows = await db.select().from(users).where(eq(users.id, id)).limit(1);
+  if (!rows[0]) throw new HttpError(404, 'Хэрэглэгч олдсонгүй');
+  if (rows[0].role !== 'moderator') {
+    throw new HttpError(400, 'Өнгө/фонт сонгох эрх зөвхөн жижиг админд олгоно');
+  }
+  const updated = await db.update(users).set({ canStyle }).where(eq(users.id, id)).returning();
+  return publicUser(updated[0]);
+}
+
+router.post('/admin/users/:id/style-permission', requireAuth, requireAdmin, ah(async (req, res) => {
+  const user = await setStylePermission(parseId(req, 'Хэрэглэгч олдсонгүй'), true);
+  res.json({ user });
+}));
+
+router.post('/admin/users/:id/revoke-style-permission', requireAuth, requireAdmin, ah(async (req, res) => {
+  const user = await setStylePermission(parseId(req, 'Хэрэглэгч олдсонгүй'), false);
+  res.json({ user });
+}));
+
 // ---------------------------------------------------------------- бичлэгийн өнгө
 // Зөвхөн том админ хэрэглэгчид бичлэгийн өнгө онооно. Өнгө нь '#RRGGBB'
 // хэлбэртэй байх ёстой; null илгээхэд өнгө арилна.
@@ -1116,6 +1141,42 @@ router.post('/admin/users/:id/text-color', requireAuth, requireAdmin, ah(async (
   const rows = await db.select().from(users).where(eq(users.id, id)).limit(1);
   if (!rows[0]) throw new HttpError(404, 'Хэрэглэгч олдсонгүй');
   const updated = await db.update(users).set({ textColor: color }).where(eq(users.id, id)).returning();
+  res.json({ user: publicUser(updated[0]) });
+}));
+
+// ---------------------------------------------------------------- өөрийн өнгө, фонт (canStyle эрхтэй жижиг админ)
+// Зөвхөн moderator + canStyle=true үед өөрийн өнгө, фонтыг өөрөө сонгоно.
+// Том админ (Playfair фонт нь өөр замаар), энгийн гишүүн → 403.
+// Биедээ байхгүй талбарыг дамжуулбал хуучин утга нь хэвээрээ байна;
+// null илгээхэд тухайн сонголт арилна. Эрх хураагдсан үед фонт нь
+// харагдахгүй болно (утга нь DB-д хадгалагдсан хэвээрээ — дахин олгоход сэргэнэ).
+
+router.post('/me/style', requireAuth, ah(async (req, res) => {
+  const u = req.user as AuthUser;
+  const rows = await db.select().from(users).where(eq(users.id, u.id)).limit(1);
+  if (!rows[0]) throw new HttpError(404, 'Хэрэглэгч олдсонгүй');
+  const row = rows[0];
+  if (row.role !== 'moderator' || !row.canStyle) {
+    throw new HttpError(403, 'Өнгө, фонт сонгох эрх танд олгогдоогүй байна. Том админаас эрх авна уу');
+  }
+  const body = (req.body ?? {}) as { color?: unknown; font?: unknown };
+  let nextColor = row.textColor;
+  let nextFont = row.textFont;
+  if ('color' in body) {
+    const color: unknown = body.color;
+    if (color !== null && (typeof color !== 'string' || !COLOR_RE.test(color))) {
+      throw new HttpError(400, 'Өнгө нь #RRGGBB хэлбэртэй байх ёстой (жишээ нь #D4AF37)');
+    }
+    nextColor = color as string | null;
+  }
+  if ('font' in body) {
+    const font: unknown = body.font;
+    if (font !== null && (typeof font !== 'string' || !TEXT_FONT_KEYS.includes(font))) {
+      throw new HttpError(400, 'Фонт сонголт буруу байна');
+    }
+    nextFont = font as string | null;
+  }
+  const updated = await db.update(users).set({ textColor: nextColor, textFont: nextFont }).where(eq(users.id, u.id)).returning();
   res.json({ user: publicUser(updated[0]) });
 }));
 
