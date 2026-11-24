@@ -18,6 +18,10 @@ export default function Rooms({ user, onViewProfile }: { user: User; onViewProfi
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const firstLoadRef = useRef(true);
+  // Өөрөө мессеж илгээхэд заавал доош гүйлгэнэ — дээш уншиж байсан ч
+  // өөрийн шинэ мессеж рүүгээ шууд очно. Ирж буй мессеж (poll) үүнийг
+  // тогтоохгүй, зөвхөн доод талд нь байвал дагана (доорх effect-ийг хар).
+  const forceScrollRef = useRef(false);
 
   const load = useCallback(async () => {
     setError('');
@@ -41,12 +45,15 @@ export default function Rooms({ user, onViewProfile }: { user: User; onViewProfi
     return () => window.clearInterval(t);
   }, [load]);
 
-  // Шинэ мессеж ирэхэд зөвхөн доод талд нь байвал автоматаар гүйлгэнэ —
-  // хэрэглэгч дээш гүйлгэж уншиж байхад нь тасалдуулахгүй.
+  // Шинэ мессеж ирэхэд: анх ачааллах, эсвэл өөрөө илгээсэн бол заавал
+  // доош гүйлгэнэ; бусдын мессеж ирэхэд зөвхөн доод талд нь байвал дагана —
+  // хэрэглэгч дээш гүйлгэж хуучин мессеж уншиж байхад нь тасалдуулахгүй.
   useEffect(() => {
     const el = listRef.current;
     if (!el) return;
-    const nearBottom = firstLoadRef.current || el.scrollHeight - el.scrollTop - el.clientHeight < 150;
+    const force = forceScrollRef.current;
+    forceScrollRef.current = false;
+    const nearBottom = firstLoadRef.current || force || el.scrollHeight - el.scrollTop - el.clientHeight < 150;
     firstLoadRef.current = false;
     if (nearBottom) bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
@@ -60,6 +67,7 @@ export default function Rooms({ user, onViewProfile }: { user: User; onViewProfi
     setError('');
     try {
       const msg = await sendMessage(draft.trim(), replyTo?.id ?? null);
+      forceScrollRef.current = true;
       setMessages((prev) => [...prev, msg]);
       setDraft('');
       setReplyTo(null);
