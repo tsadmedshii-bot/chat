@@ -1,14 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { AccessRequest, BanLog, MemberRow, User } from '../../../shared/src/types';
+import type { BanLog, MemberRow, User } from '../../../shared/src/types';
 import {
   ApiError,
-  adminApproveAccess,
   adminBanUser,
   adminDeleteUser,
-  adminDenyAccess,
   adminGrantBanPermission,
   adminGrantModerator,
-  adminListAccessRequests,
   adminListMembers,
   adminRevokeBanPermission,
   adminRevokeModerator,
@@ -18,14 +15,6 @@ import {
   setTextColor,
 } from '../api';
 import UserName, { Avatar } from '../components/UserBadge';
-
-function accessLabel(row: MemberRow): string {
-  if (row.privateAccess === 'auto') return 'Автомат (админ)';
-  if (row.privateAccess === 'approved') return 'Зөвшөөрсөн';
-  if (row.privateAccess === 'pending') return 'Хүлээгдэж байна';
-  if (row.privateAccess === 'denied') return 'Татгалзсан';
-  return 'Хүсэлтгүй';
-}
 
 /** Хэрэглэгч одоо бантай эсэх — байнга бан ЭСВЭЛ хугацаа нь дуусаагүй бан. */
 function isBannedUser(u: User): boolean {
@@ -114,7 +103,6 @@ export default function Members({
   onUserChange?: (u: User) => void;
 }) {
   const [members, setMembers] = useState<MemberRow[]>([]);
-  const [requests, setRequests] = useState<AccessRequest[]>([]);
   const [banLogs, setBanLogs] = useState<BanLog[]>([]);
   const [banTargetId, setBanTargetId] = useState<number | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
@@ -161,7 +149,6 @@ export default function Members({
     try {
       setMembers(await adminListMembers());
       if (isAdmin) {
-        setRequests(await adminListAccessRequests());
         setBanLogs(await getBanLogs());
       }
     } catch (err) {
@@ -189,18 +176,6 @@ export default function Members({
         <p>Энэ хэсгийг зөвхөн том админ, болон бандах эрхтэй жижиг админ харна.</p>
       </div>
     );
-  }
-
-  async function decide(requestId: number, approve: boolean): Promise<void> {
-    setError('');
-    try {
-      if (approve) await adminApproveAccess(requestId);
-      else await adminDenyAccess(requestId);
-      setNotice(approve ? 'Зөвшөөрөл олголоо.' : 'Хүсэлтийг татгалзлаа.');
-      await refresh();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Алдаа гарлаа.');
-    }
   }
 
   async function grant(id: number): Promise<void> {
@@ -310,29 +285,6 @@ export default function Members({
 
       {isAdmin && (
         <>
-          <h3>🏰 Зөвшөөрөл хүссэн гишүүд ({requests.length})</h3>
-          {requests.length === 0 ? (
-            <p className="empty">Хүлээгдэж буй хүсэлт алга.</p>
-          ) : (
-            requests.map((r) => (
-              <div key={r.id} className="member-row">
-                <UserName user={r.user} showOnline />
-                <div className="member-actions">
-                  <button type="button" className="btn-primary small" onClick={() => void decide(r.id, true)}>
-                    Зөвшөөрөх
-                  </button>
-                  <button type="button" className="btn-danger-ghost small" onClick={() => void decide(r.id, false)}>
-                    Татгалзах
-                  </button>
-                </div>
-              </div>
-            ))
-          )}
-        </>
-      )}
-
-      {isAdmin && (
-        <>
           <h3>🚫 Бантай хэрэглэгчид ({banLogs.filter((l) => l.status === 'active').length})</h3>
           <p className="muted small">Одоо бантай байгаа хэрэглэгчид — бан тайлахад эндээс шууд тайлж болно.</p>
           {banLogs.filter((l) => l.status === 'active').length === 0 ? (
@@ -406,7 +358,6 @@ export default function Members({
             <div className="muted small">
               {row.user.online ? '🟢 Онлайн — одоо байна' : '⚪ Офлайн'}
             </div>
-            <div className="muted small">Зөвшөөрөлтэй өрөө: {accessLabel(row)}</div>
             {row.user.role === 'moderator' && (
               <div className="muted small">
                 Бандах эрх: {row.user.canBan ? 'Олгосон ✅' : 'Олгоогүй'}
