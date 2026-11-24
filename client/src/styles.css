@@ -1109,7 +1109,7 @@ img.avatar {
   transform: scale(1.15);
 }
 
-/* Өрөөнүүд */
+/* Нийтийн чат */
 .room-tabs {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1342,4 +1342,237 @@ img.avatar {
 
 .btn-ghost {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+}
+
+/* Нийтийн чат — дэлгэц дүүрэн (толгой хэвээрээ, хөл хэсэг нуугддаг) */
+.app-rooms {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+}
+
+.app-rooms .site-header {
+  position: static;
+  flex-shrink: 0;
+}
+
+.app-rooms .site-footer {
+  display: none;
+}
+
+.chat-full-main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 12px 12px 8px;
+}
+
+.chat-full {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.chat-full-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.chat-full-head h2 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.chat-full .message-list {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+}
+
+.chat-form {
+  margin-top: 0;
+  flex-shrink: 0;
+}
+
+/* Хариултын эшлэл (snapshot) */
+.reply-quote {
+  background: rgba(124, 92, 255, 0.15);
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  padding: 6px 10px;
+  margin: 6px 0;
+  font-size: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+}
+
+.message.mine .reply-quote,
+.dm-message.mine .reply-quote {
+  background: rgba(255, 255, 255, 0.15);
+  border-left-color: rgba(255, 255, 255, 0.6);
+}
+
+.reply-quote-author {
+  font-weight: 700;
+}
+
+.reply-quote-text {
+  color: var(--muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.message.mine .reply-quote-text,
+.dm-message.mine .reply-quote-text {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+/* Хариулж буй мессежийн мөр (оролтын дээгүүр) */
+.reply-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: var(--card2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: 0.9rem;
+  flex-shrink: 0;
+}
+
+.reply-bar > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Эможи урвал */
+.reactions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+  align-items: center;
+}
+
+.reaction-chip {
+  background: var(--card2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 0.85rem;
+  color: var(--text);
+}
+
+.reaction-chip.mine {
+  border-color: var(--accent);
+  background: rgba(124, 92, 255, 0.25);
+}
+
+.message.mine .reaction-chip,
+.dm-message.mine .reaction-chip {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #fff;
+}
+
+.message.mine .reaction-chip.mine,
+.dm-message.mine .reaction-chip.mine {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: #fff;
+}
+
+.reaction-add {
+  background: none;
+  border: 1px dashed var(--border);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.reaction-picker {
+  display: inline-flex;
+  gap: 2px;
+  background: var(--card2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 6px;
+}
+
+.reaction-picker button {
+  background: none;
+  border: none;
+  font-size: 1.1rem;
+  padding: 2px;
+}
+
+.reaction-picker button:hover {
+  transform: scale(1.2);
+}
+
+/* Засвар (inline) */
+.edit-box {
+  margin: 6px 0;
+  text-align: left;
+}
+
+.edit-box textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 52px;
+}
+
+.edit-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.edited-mark {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.message.mine .edited-mark,
+.dm-message.mine .edited-mark {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+/* Мессежийн хажуугийн үйлдлүүд (хариулах / засах / устгах) */
+.message-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/* Хувь чатын мессежийн агуулга */
+.dm-message-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.dm-message-body p {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Сэтгэгдлийн үйлдлүүд */
+.comment-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+  flex-wrap: wrap;
 }
