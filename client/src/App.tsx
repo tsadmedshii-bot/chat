@@ -107,7 +107,7 @@ export default function App() {
   const isAdmin = user.role === 'admin';
 
   return (
-    <div>
+    <div className={view === 'rooms' ? 'app-rooms' : undefined}>
       <header className="site-header">
         <div className="container header-inner">
           <button type="button" className="brand" onClick={() => setView('home')}>
@@ -119,7 +119,7 @@ export default function App() {
               🏠 Нүүр
             </button>
             <button type="button" className={view === 'rooms' ? 'active' : ''} onClick={() => setView('rooms')}>
-              💬 Өрөөнүүд
+              💬 Чат
             </button>
             <button type="button" className={view === 'direct' ? 'active' : ''} onClick={() => setView('direct')}>
               💬 Хувь чат
@@ -143,7 +143,7 @@ export default function App() {
           </div>
         </div>
       </header>
-      <main className="container main-content">
+      <main className={view === 'rooms' ? 'main-content chat-full-main' : 'container main-content'}>
         {view === 'home' && <Home user={user} onViewProfile={setProfileUserId} />}
         {view === 'rooms' && <Rooms user={user} onViewProfile={setProfileUserId} />}
         {view === 'direct' && (
@@ -162,7 +162,7 @@ export default function App() {
       )}
       <footer className="site-footer">
         <div className="container">
-          <span>Чат — пост ба 2 өрөө 🌍 🏰</span>
+          <span>Чат — пост ба нийтийн чат 💬</span>
         </div>
       </footer>
     </div>
