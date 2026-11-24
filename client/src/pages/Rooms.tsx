@@ -68,6 +68,12 @@ export default function Rooms({ user, onViewProfile }: { user: User; onViewProfi
     return m.author !== null && (m.author.id === user.id || user.role === 'admin' || user.role === 'moderator');
   };
 
+  // Хамгийн сүүлийн угтах мессеж — чатын толгой дээр 1 цаг пиндэгдэнэ.
+  // Угтах мессеж 60 минутын дараа устахаар баннер ч дагаж арилна; нэг цагт
+  // хэдэн гишүүн орсон ч баннерт зөвхөн хамгийн сүүлийнх нь харагдана
+  // (өмнөхүүд нь мессежийн урсгалд хэвээрээ байна).
+  const latestWelcome = [...messages].reverse().find((m) => m.kind === 'welcome') ?? null;
+
   async function submit(e: React.FormEvent): Promise<void> {
     e.preventDefault();
     if (!draft.trim()) return;
@@ -126,6 +132,12 @@ export default function Rooms({ user, onViewProfile }: { user: User; onViewProfi
         <h2>💬 Нийтийн чат</h2>
         <span className="muted small">Хүн бүрд нээлттэй</span>
       </div>
+
+      {latestWelcome && (
+        <div className="welcome-pin">
+          <span className="welcome-pin-text">📌 {latestWelcome.content}</span>
+        </div>
+      )}
 
       {error && <p className="error">{error}</p>}
 
