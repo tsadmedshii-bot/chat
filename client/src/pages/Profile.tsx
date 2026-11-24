@@ -1,9 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import type { User } from '../../../shared/src/types';
-import { ApiError, deleteMyAccount, getUserProfile, logout, removeAvatar, uploadAvatar } from '../api';
+import { STYLE_FONTS } from '../../../shared/src/types';
+import { ApiError, deleteMyAccount, getUserProfile, logout, me, removeAvatar, setMyStyle, uploadAvatar } from '../api';
 import InstallApp from '../components/InstallApp';
 import { Avatar, RoleBadge } from '../components/UserBadge';
 import Lightbox from '../components/Lightbox';
+
+/** Бичлэгийн өнгөний бэлэн сонголтууд («Гишүүд» хуудасныхтай ижил). */
+const PRESET_COLORS = ['#D4AF37', '#E5484D', '#3E63DD', '#30A46C', '#8E4EC6', '#D6409F', '#F76B15', '#12A594'];
 
 /**
  * Зургийг 512x512 JPEG (чанар 0.8) болгон жижигрүүлж data URL буцаана.
@@ -51,6 +55,36 @@ export default function Profile({ user, onUserChange, onAccountDeleted }: { user
   const [deletePassword, setDeletePassword] = useState('');
   const [deleteError, setDeleteError] = useState('');
   const [deleting, setDeleting] = useState(false);
+  // Өөрийн өнгө, фонт (зөвхөн canStyle эрхтэй жижиг админ).
+  const [myColor, setMyColor] = useState<string | null>(user.textColor);
+  const [myFont, setMyFont] = useState<string | null>(user.textFont);
+  const [customColor, setCustomColor] = useState(user.textColor ?? '#D4AF37');
+  const [savingStyle, setSavingStyle] = useState(false);
+
+  // Хуудас нээгдэхэд өөрийн эрхийг серверээс дахин авна: нэвтэрсэн
+  // хэвээр байхдаа эрх авсан бол хуучирсан төлөвөөс болоод сонгогч нь
+  // харагдахгүй байх алдааг засна (Members-тэй ижил).
+  useEffect(() => {
+    let alive = true;
+    void me()
+      .then((fresh) => {
+        if (!alive) return;
+        if (fresh.canStyle !== user.canStyle || fresh.textColor !== user.textColor || fresh.textFont !== user.textFont) {
+          onUserChange(fresh);
+          setMyColor(fresh.textColor);
+          setMyFont(fresh.textFont);
+          setCustomColor(fresh.textColor ?? '#D4AF37');
+        }
+      })
+      .catch(() => {
+        // Ачаалж чадсангүй — хуучин хэрэглэгчээр үргэлжлүүлнэ.
+      });
+    return () => {
+      alive = false;
+    };
+    // Зөвхөн хуудас нээгдэхэд нэг удаа.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Постын тоог профайлаас авна.
   useEffect(() => {
@@ -110,6 +144,25 @@ export default function Profile({ user, onUserChange, onAccountDeleted }: { user
       setNotice('Профайл зураг устгагдлаа.');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Зураг устгахад алдаа гарлаа.');
+    }
+  }
+
+  /** Өөрийн бичлэгийн өнгө, фонтыг хадгална — сонгох бүрд шууд хэрэглэгдэнэ. */
+  async function saveStyle(color: string | null, font: string | null): Promise<void> {
+    setError('');
+    setNotice('');
+    setSavingStyle(true);
+    try {
+      const updated = await setMyStyle(color, font);
+      onUserChange(updated);
+      setMyColor(updated.textColor);
+      setMyFont(updated.textFont);
+      setCustomColor(updated.textColor ?? '#D4AF37');
+      setNotice('Өнгө, фонт хадгалагдлаа. ✅');
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Хадгалахад алдаа гарлаа.');
+    } finally {
+      setSavingStyle(false);
     }
   }
 
@@ -176,6 +229,70 @@ export default function Profile({ user, onUserChange, onAccountDeleted }: { user
           Зураг автоматаар 512×512 хэмжээтэй болж жижигрэнэ. Зөвхөн JPEG, PNG, WebP — 500 KB хүртэл.
           {user.avatar ? ' Зургийг томруулж харахын тулд дарна уу.' : ''}
         </p>
+
+        {user.role === 'moderator' && user.canStyle && (
+          <div className="style-section">
+            <h3>🎨 Миний бичлэгийн өнгө, фонт</h3>
+            <p className="muted small">
+              Том админ танд энэ эрхийг олгосон тул өөрийн өнгө, фонтыг эндээс сонгоно.
+              Сонгосон өнгө, фонт нь таны нийтийн чат болон хувь чатын бичлэгт харагдана.
+              Эрх хураагдвал фонт нь харагдахгүй болно.
+            </p>
+            <div className="color-picker">
+              <span className="muted small">Бичлэгийн өнгө:</span>
+              {PRESET_COLORS.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  className={myColor === c ? 'color-swatch active' : 'color-swatch'}
+                  style={{ backgroundColor: c }}
+                  title={c}
+                  aria-label={`Өнгө ${c}`}
+                  disabled={savingStyle}
+                  onClick={() => void saveStyle(c, myFont)}
+                />
+              ))}
+              <input
+                type="color"
+                value={customColor}
+                onChange={(e) => setCustomColor(e.target.value)}
+                title="Өөр өнгө сонгох"
+                aria-label="Өөр өнгө сонгох"
+              />
+              <button type="button" className="btn-ghost small" disabled={savingStyle} onClick={() => void saveStyle(customColor, myFont)}>
+                Сонгох
+              </button>
+              {myColor && (
+                <button type="button" className="btn-ghost small" disabled={savingStyle} onClick={() => void saveStyle(null, myFont)}>
+                  Арилгах
+                </button>
+              )}
+            </div>
+            <div className="font-picker">
+              <span className="muted small">Фонт (7 гоёмсог фонт — Монгол, Англи хэл дээр бичиж болно):</span>
+              <button
+                type="button"
+                className={myFont === null ? 'font-option active' : 'font-option'}
+                disabled={savingStyle}
+                onClick={() => void saveStyle(myColor, null)}
+              >
+                Энгийн — Сайн уу
+              </button>
+              {STYLE_FONTS.map((f) => (
+                <button
+                  key={f.key}
+                  type="button"
+                  className={myFont === f.key ? `font-option active ${f.cssClass}` : `font-option ${f.cssClass}`}
+                  disabled={savingStyle}
+                  onClick={() => void saveStyle(myColor, f.key)}
+                >
+                  {f.name} — Сайн уу
+                </button>
+              ))}
+            </div>
+            {savingStyle && <p className="muted small">Хадгалж байна…</p>}
+          </div>
+        )}
 
         <InstallApp />
 
