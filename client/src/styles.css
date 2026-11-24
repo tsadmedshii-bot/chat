@@ -1200,6 +1200,68 @@ img.avatar {
   letter-spacing: 0.01em;
 }
 
+/* Жижиг админы сонгож болох 7 гоёмсог фонт — бүгд Кирилл + Латин дэмждэг.
+   Playfair Display энд байхгүй — тэр нь зөвхөн том админых. */
+.font-lobster {
+  font-family: 'Lobster', cursive;
+}
+.font-pacifico {
+  font-family: 'Pacifico', cursive;
+}
+.font-caveat {
+  font-family: 'Caveat', cursive;
+  font-weight: 500;
+}
+.font-cormorant {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-weight: 500;
+}
+.font-comfortaa {
+  font-family: 'Comfortaa', 'Segoe UI', sans-serif;
+  font-weight: 500;
+}
+.font-yeseva {
+  font-family: 'Yeseva One', Georgia, serif;
+}
+.font-neucha {
+  font-family: 'Neucha', cursive;
+}
+
+/* Өнгө, фонт сонгох хэсэг (Профайл — canStyle эрхтэй жижиг админ). */
+.style-section {
+  margin-top: 16px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card2);
+}
+
+.font-picker {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.font-option {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 12px;
+  font-size: 1.1rem;
+  color: var(--text);
+  background: var(--card);
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.font-option.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(124, 92, 255, 0.35);
+}
+
 /* Бичлэгийн өнгө сонгогч (зөвхөн том админ — «Гишүүд» хуудас). */
 .color-picker {
   display: flex;
