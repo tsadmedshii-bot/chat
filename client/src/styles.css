@@ -1233,6 +1233,25 @@ img.avatar {
   justify-content: center;
 }
 
+/* Чатны толгой дээр пиндэгдсэн угтах мэндчилгээ — хамгийн сүүлийн
+   угтах мессеж 1 цаг харагдана. Мессежийн жагсаалтын дээгүүр, гүйлгэдэггүй
+   хэсэгт байрлах тул чат урсах үед ч толгой дээрээ тогтож харагдана. */
+.welcome-pin {
+  flex-shrink: 0;
+  background: linear-gradient(135deg, rgba(124, 92, 255, 0.28), rgba(212, 175, 55, 0.28));
+  border: 1px solid #7c5cff;
+  border-radius: 12px;
+  padding: 8px 14px;
+  text-align: center;
+  box-shadow: 0 4px 16px rgba(124, 92, 255, 0.25);
+}
+
+.welcome-pin-text {
+  font-weight: 600;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* Жижиг админы сонгож болох 7 гоёмсог фонт — бүгд Кирилл + Латин дэмждэг.
    Playfair Display энд байхгүй — тэр нь зөвхөн том админых. */
 .font-lobster {
