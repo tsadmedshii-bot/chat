@@ -1200,6 +1200,39 @@ img.avatar {
   letter-spacing: 0.01em;
 }
 
+/* Угтах мессеж — шинэ гишүүн бүртгүүлэхэд нийтийн чатад гарна.
+   Төвд байрлана, аватаргүй, дулаан баярын градиенттай. */
+.welcome-message {
+  justify-content: center;
+}
+
+.welcome-body {
+  background: linear-gradient(135deg, rgba(124, 92, 255, 0.28), rgba(212, 175, 55, 0.28));
+  border: 1px solid #7c5cff;
+  border-radius: 16px;
+  padding: 12px 18px;
+  max-width: 85%;
+  text-align: center;
+  box-shadow: 0 4px 16px rgba(124, 92, 255, 0.25);
+}
+
+.welcome-text {
+  display: block;
+  font-size: 1.05em;
+  font-weight: 600;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.welcome-body .message-time {
+  display: block;
+  margin-top: 4px;
+}
+
+.welcome-body .reactions {
+  justify-content: center;
+}
+
 /* Жижиг админы сонгож болох 7 гоёмсог фонт — бүгд Кирилл + Латин дэмждэг.
    Playfair Display энд байхгүй — тэр нь зөвхөн том админых. */
 .font-lobster {
