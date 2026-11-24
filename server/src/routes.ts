@@ -3,10 +3,11 @@ import { Router } from 'express';
 import type { NextFunction, Request, Response } from 'express';
 import { and, asc, desc, eq, isNull, or } from 'drizzle-orm';
 import { db } from './db';
-import { directMessages, dmReads, messages, postComments, postLikes, posts, roomAccess, sessions, users, banLogs } from './schema';
+import { directMessages, dmReads, messages, postComments, postLikes, posts, reactions, roomAccess, sessions, users, banLogs } from './schema';
 import type { AuthUser } from './auth';
 import { createSession, deleteSession, HttpError, banMessage, isBannedNow, registerUser, requireAdmin, requireAuth, verifyPassword } from './auth';
-import type { AccessRequest, AccessStatus, BanLog, ChatMessage, DirectConversation, DirectMessage, MemberRow, Post, PostComment, Role, Room, User } from '../../shared/src/types';
+import type { BanLog, ChatMessage, DirectConversation, DirectMessage, MemberRow, Post, PostComment, ReactionCount, ReactionTargetType, ReplyQuote, Role, Room, User } from '../../shared/src/types';
+import { REACTION_EMOJIS } from '../../shared/src/types';
 
 export const router = Router();
 
@@ -31,25 +32,73 @@ function deletedUser(authorId: number, createdAt: Date): User {
   return { id: authorId, name: 'Устгасан хэрэглэгч', username: '', role: 'member' as Role, banned: false, bannedUntil: null, canBan: false, avatar: null, textColor: null, lastSeenAt: null, online: false, createdAt: toIso(createdAt) };
 }
 
-function toDirectMessage(row: { id: number; senderId: number; recipientId: number; content: string; createdAt: Date }): DirectMessage {
-  return { id: row.id, senderId: row.senderId, recipientId: row.recipientId, content: row.content, createdAt: toIso(row.createdAt) };
+function toDirectMessage(row: { id: number; senderId: number; recipientId: number; content: string; replyAuthorName: string | null; replyText: string | null; editedAt: Date | null; createdAt: Date }, reactionRows: { targetType: string; targetId: number; emoji: string; userId: number }[], meId: number): DirectMessage {
+  return {
+    id: row.id,
+    senderId: row.senderId,
+    recipientId: row.recipientId,
+    content: row.content,
+    replyTo: replyQuote(row.replyAuthorName, row.replyText),
+    editedAt: row.editedAt ? toIso(row.editedAt) : null,
+    reactions: reactionCounts(reactionRows, 'dm', row.id, meId),
+    createdAt: toIso(row.createdAt),
+  };
 }
 
-/** Том админ болон жижиг админ зөвшөөрөлтэй өрөөнд автоматаар орно. */
-function hasPrivateAccess(user: AuthUser, accessRow: { status: string } | undefined): boolean {
-  if (user.role === 'admin' || user.role === 'moderator') return true;
-  return accessRow?.status === 'approved';
+/** Хариултын snapshot — нэр + текст хоёулаа байвал эшлэл, үгүй бол null. */
+function replyQuote(authorName: string | null, text: string | null): ReplyQuote | null {
+  if (!authorName || text === null) return null;
+  return { authorName, text };
 }
 
-async function loadAccess(userId: number): Promise<{ id: number; status: string } | undefined> {
-  const rows = await db.select().from(roomAccess).where(eq(roomAccess.userId, userId)).limit(1);
-  return rows[0];
-}
-
-function requirePrivateAccess(user: AuthUser, accessRow: { status: string } | undefined): void {
-  if (!hasPrivateAccess(user, accessRow)) {
-    throw new HttpError(403, 'Энэ өрөөнд орох зөвшөөрөл хэрэгтэй байна. Эхлээд хүсэлт илгээнэ үү');
+/** Бичлэгийн агуулгыг шалгана — хоосон, эсвэл хэт урт бол 400. */
+function validateContent(body: unknown, max: number, label: string): string {
+  const content = String((body as { content?: unknown } | null | undefined)?.content ?? '').trim();
+  if (content.length < 1 || content.length > max) {
+    throw new HttpError(400, label);
   }
+  return content;
+}
+
+/** Урвалүүдыг (target_type, target_id)-ээр бүлэглэж, эможи тус бүрээр
+    тоолж, би дарсан эсэхийг тэмдэглэнэ. REACTION_EMOJIS дарааллаар буцаана. */
+function reactionCounts(
+  rows: { targetType: string; targetId: number; emoji: string; userId: number }[],
+  type: ReactionTargetType,
+  id: number,
+  meId: number,
+): ReactionCount[] {
+  const byEmoji = new Map<string, { count: number; mine: boolean }>();
+  for (const r of rows) {
+    if (r.targetType !== type || r.targetId !== id) continue;
+    const cur = byEmoji.get(r.emoji) ?? { count: 0, mine: false };
+    cur.count += 1;
+    if (r.userId === meId) cur.mine = true;
+    byEmoji.set(r.emoji, cur);
+  }
+  return (REACTION_EMOJIS as readonly string[])
+    .filter((e) => byEmoji.has(e))
+    .map((e) => ({ emoji: e, count: byEmoji.get(e)!.count, reactedByMe: byEmoji.get(e)!.mine }));
+}
+
+async function loadAllReactions(): Promise<{ targetType: string; targetId: number; emoji: string; userId: number }[]> {
+  const rows = await db.select().from(reactions);
+  return rows.map((r) => ({ targetType: r.targetType, targetId: r.targetId, emoji: r.emoji, userId: r.userId }));
+}
+
+/** Өөрийнх нь л засч болно — админ/жижиг админ ч бусдын бичлэгийг засаж болохгүй
+    (устгаж л болно). */
+function requireAuthor(user: AuthUser, authorId: number): void {
+  if (user.id !== authorId) {
+    throw new HttpError(403, 'Зөвхөн зохиогч өөрийн бичлэгийг засч болно');
+  }
+}
+
+/** Урвалын зорилт байгаа эсэхийг шалгана — байхгүй бол 404. */
+async function requireReactionTarget(type: ReactionTargetType, id: number): Promise<void> {
+  const table = type === 'message' ? messages : type === 'dm' ? directMessages : postComments;
+  const rows = await db.select({ id: table.id }).from(table).where(eq(table.id, id)).limit(1);
+  if (!rows[0]) throw new HttpError(404, 'Бичлэг олдсонгүй');
 }
 
 /** Өөрийнх нь, эсвэл админ/жижиг админ бол бусдынхыг устгаж болно. */
@@ -71,8 +120,9 @@ function parseId(req: Request, label = 'Бичлэг олдсонгүй', param 
 }
 
 function parseRoom(req: Request): Room {
+  // Одоо зөвхөн нийтийн өрөө л байна.
   const room = req.params.room;
-  if (room !== 'public' && room !== 'private') throw new HttpError(404, 'Өрөө олдсонгүй');
+  if (room !== 'public') throw new HttpError(404, 'Өрөө олдсонгүй');
   return room;
 }
 
@@ -256,6 +306,7 @@ async function listPosts(meId: number): Promise<Post[]> {
   const userById = new Map(userRows.map((u) => [u.id, publicUser(u)]));
   const likeRows = await db.select().from(postLikes);
   const commentRows = await db.select().from(postComments).orderBy(asc(postComments.createdAt));
+  const reactionRows = await loadAllReactions();
   const likesByPost = new Map<number, { count: number; mine: boolean }>();
   for (const l of likeRows) {
     const cur = likesByPost.get(l.postId) ?? { count: 0, mine: false };
@@ -268,7 +319,16 @@ async function listPosts(meId: number): Promise<Post[]> {
     const author = userById.get(c.authorId);
     if (!author) continue;
     const list = commentsByPost.get(c.postId) ?? [];
-    list.push({ id: c.id, postId: c.postId, author, content: c.content, createdAt: toIso(c.createdAt) });
+    list.push({
+      id: c.id,
+      postId: c.postId,
+      author,
+      content: c.content,
+      replyTo: replyQuote(c.replyAuthorName, c.replyText),
+      editedAt: c.editedAt ? toIso(c.editedAt) : null,
+      reactions: reactionCounts(reactionRows, 'comment', c.id, meId),
+      createdAt: toIso(c.createdAt),
+    });
     commentsByPost.set(c.postId, list);
   }
   return postRows.map((p) => {
@@ -281,6 +341,7 @@ async function listPosts(meId: number): Promise<Post[]> {
       likeCount: likes.count,
       likedByMe: likes.mine,
       comments: commentsByPost.get(p.id) ?? [],
+      editedAt: p.editedAt ? toIso(p.editedAt) : null,
       createdAt: toIso(p.createdAt),
     };
   });
@@ -310,6 +371,7 @@ router.post(
         likeCount: 0,
         likedByMe: false,
         comments: [],
+        editedAt: null,
         createdAt: toIso(row.createdAt),
       } satisfies Post,
     });
@@ -354,7 +416,28 @@ router.post(
     }
     const postRows = await db.select().from(posts).where(eq(posts.id, id)).limit(1);
     if (!postRows[0]) throw new HttpError(404, 'Пост олдсонгүй');
-    const inserted = await db.insert(postComments).values({ postId: id, authorId: u.id, content }).returning();
+    // Хариулж буй сэтгэгдэл: энэ постын сэтгэгдэл байх ёстой.
+    const rawReplyToId = req.body?.replyToId;
+    let replyId: number | null = null;
+    let replyAuthorName: string | null = null;
+    let replyText: string | null = null;
+    if (rawReplyToId !== undefined && rawReplyToId !== null) {
+      replyId = Number(rawReplyToId);
+      if (!Number.isInteger(replyId) || replyId < 1) throw new HttpError(404, 'Хариулж буй сэтгэгдэл олдсонгүй');
+      const origRows = await db
+        .select()
+        .from(postComments)
+        .where(and(eq(postComments.id, replyId), eq(postComments.postId, id)))
+        .limit(1);
+      if (!origRows[0]) throw new HttpError(404, 'Хариулж буй сэтгэгдэл олдсонгүй');
+      const origAuthor = await db.select().from(users).where(eq(users.id, origRows[0].authorId)).limit(1);
+      replyAuthorName = origAuthor[0]?.name ?? 'Устгасан хэрэглэгч';
+      replyText = origRows[0].content;
+    }
+    const inserted = await db
+      .insert(postComments)
+      .values({ postId: id, authorId: u.id, content, replyToId: replyId, replyAuthorName, replyText })
+      .returning();
     const row = inserted[0];
     res.status(201).json({
       comment: {
@@ -362,9 +445,66 @@ router.post(
         postId: id,
         author: publicUser({ ...u, createdAt: u.createdAt }),
         content: row.content,
+        replyTo: replyQuote(replyAuthorName, replyText),
+        editedAt: null,
+        reactions: [],
         createdAt: toIso(row.createdAt),
       } satisfies PostComment,
     });
+  }),
+);
+
+// Сэтгэгдэл засах — зөвхөн зохиогч (1–1000 тэмдэгт).
+router.patch(
+  '/comments/:id',
+  requireAuth,
+  ah(async (req, res) => {
+    const u = req.user as AuthUser;
+    const id = parseId(req, 'Сэтгэгдэл олдсонгүй');
+    const content = validateContent(req.body, 1000, 'Сэтгэгдэл 1–1000 тэмдэгт байх ёстой');
+    const rows = await db.select().from(postComments).where(eq(postComments.id, id)).limit(1);
+    if (!rows[0]) throw new HttpError(404, 'Сэтгэгдэл олдсонгүй');
+    requireAuthor(u, rows[0].authorId);
+    const updated = await db
+      .update(postComments)
+      .set({ content, editedAt: new Date() })
+      .where(eq(postComments.id, id))
+      .returning();
+    const row = updated[0];
+    const reactionRows = await loadAllReactions();
+    const authorRows = await db.select().from(users).where(eq(users.id, row.authorId)).limit(1);
+    const author = authorRows[0] ? publicUser(authorRows[0]) : deletedUser(row.authorId, row.createdAt);
+    res.json({
+      comment: {
+        id: row.id,
+        postId: row.postId,
+        author,
+        content: row.content,
+        replyTo: replyQuote(row.replyAuthorName, row.replyText),
+        editedAt: row.editedAt ? toIso(row.editedAt) : null,
+        reactions: reactionCounts(reactionRows, 'comment', row.id, u.id),
+        createdAt: toIso(row.createdAt),
+      } satisfies PostComment,
+    });
+  }),
+);
+
+// Пост засах — зөвхөн зохиогч (1–2000 тэмдэгт).
+router.patch(
+  '/posts/:id',
+  requireAuth,
+  ah(async (req, res) => {
+    const u = req.user as AuthUser;
+    const id = parseId(req);
+    const content = validateContent(req.body, 2000, 'Пост 1–2000 тэмдэгт байх ёстой');
+    const rows = await db.select().from(posts).where(eq(posts.id, id)).limit(1);
+    if (!rows[0]) throw new HttpError(404, 'Пост олдсонгүй');
+    requireAuthor(u, rows[0].authorId);
+    await db.update(posts).set({ content, editedAt: new Date() }).where(eq(posts.id, id));
+    const all = await listPosts(u.id);
+    const post = all.find((p) => p.id === id);
+    if (!post) throw new HttpError(404, 'Пост олдсонгүй');
+    res.json({ post });
   }),
 );
 
@@ -384,23 +524,28 @@ router.delete(
   }),
 );
 
-// ---------------------------------------------------------------- чат өрөөнүүд
+// ---------------------------------------------------------------- нийтийн чат
+// Одоо зөвхөн нийтийн өрөө л байна — зөвшөөрөлтэй өрөөг хаасан.
 
-async function listMessages(room: Room): Promise<ChatMessage[]> {
+async function listMessages(meId: number): Promise<ChatMessage[]> {
   const rows = await db
     .select()
     .from(messages)
-    .where(eq(messages.room, room))
+    .where(eq(messages.room, 'public'))
     .orderBy(asc(messages.createdAt))
     .limit(200);
   if (rows.length === 0) return [];
   const userRows = await db.select().from(users);
   const userById = new Map(userRows.map((u) => [u.id, publicUser(u)]));
+  const reactionRows = await loadAllReactions();
   return rows.map((m) => ({
     id: m.id,
     room: m.room as Room,
     author: userById.get(m.authorId) ?? deletedUser(m.authorId, m.createdAt),
     content: m.content,
+    replyTo: replyQuote(m.replyAuthorName, m.replyText),
+    editedAt: m.editedAt ? toIso(m.editedAt) : null,
+    reactions: reactionCounts(reactionRows, 'message', m.id, meId),
     createdAt: toIso(m.createdAt),
   }));
 }
@@ -410,11 +555,8 @@ router.get(
   requireAuth,
   ah(async (req, res) => {
     const u = req.user as AuthUser;
-    const room = parseRoom(req);
-    if (room === 'private') {
-      requirePrivateAccess(u, await loadAccess(u.id));
-    }
-    res.json({ messages: await listMessages(room) });
+    parseRoom(req);
+    res.json({ messages: await listMessages(u.id) });
   }),
 );
 
@@ -424,14 +566,28 @@ router.post(
   ah(async (req, res) => {
     const u = req.user as AuthUser;
     const room = parseRoom(req);
-    if (room === 'private') {
-      requirePrivateAccess(u, await loadAccess(u.id));
-    }
     const content = String(req.body?.content ?? '').trim();
     if (content.length < 1 || content.length > 2000) {
       throw new HttpError(400, 'Мессеж 1–2000 тэмдэгт байх ёстой');
     }
-    const inserted = await db.insert(messages).values({ room, authorId: u.id, content }).returning();
+    // Хариулж буй мессеж: нийтийн өрөөний мессеж байх ёстой.
+    const rawReplyToId = req.body?.replyToId;
+    let replyId: number | null = null;
+    let replyAuthorName: string | null = null;
+    let replyText: string | null = null;
+    if (rawReplyToId !== undefined && rawReplyToId !== null) {
+      replyId = Number(rawReplyToId);
+      if (!Number.isInteger(replyId) || replyId < 1) throw new HttpError(404, 'Хариулж буй мессеж олдсонгүй');
+      const origRows = await db.select().from(messages).where(eq(messages.id, replyId)).limit(1);
+      if (!origRows[0] || origRows[0].room !== 'public') throw new HttpError(404, 'Хариулж буй мессеж олдсонгүй');
+      const origAuthor = await db.select().from(users).where(eq(users.id, origRows[0].authorId)).limit(1);
+      replyAuthorName = origAuthor[0]?.name ?? 'Устгасан хэрэглэгч';
+      replyText = origRows[0].content;
+    }
+    const inserted = await db
+      .insert(messages)
+      .values({ room, authorId: u.id, content, replyToId: replyId, replyAuthorName, replyText })
+      .returning();
     const row = inserted[0];
     res.status(201).json({
       message: {
@@ -439,6 +595,45 @@ router.post(
         room,
         author: publicUser({ ...u, createdAt: u.createdAt }),
         content: row.content,
+        replyTo: replyQuote(replyAuthorName, replyText),
+        editedAt: null,
+        reactions: [],
+        createdAt: toIso(row.createdAt),
+      } satisfies ChatMessage,
+    });
+  }),
+);
+
+// Өрөөний мессеж засах — зөвхөн зохиогч (1–2000 тэмдэгт).
+// Засвар нь 15 минутын устгах цагийг сунгадаггүй (created_at хэвээрээ).
+router.patch(
+  '/messages/:id',
+  requireAuth,
+  ah(async (req, res) => {
+    const u = req.user as AuthUser;
+    const id = parseId(req, 'Мессеж олдсонгүй');
+    const content = validateContent(req.body, 2000, 'Мессеж 1–2000 тэмдэгт байх ёстой');
+    const rows = await db.select().from(messages).where(eq(messages.id, id)).limit(1);
+    if (!rows[0]) throw new HttpError(404, 'Мессеж олдсонгүй');
+    requireAuthor(u, rows[0].authorId);
+    const updated = await db
+      .update(messages)
+      .set({ content, editedAt: new Date() })
+      .where(eq(messages.id, id))
+      .returning();
+    const row = updated[0];
+    const reactionRows = await loadAllReactions();
+    const authorRows = await db.select().from(users).where(eq(users.id, row.authorId)).limit(1);
+    const author = authorRows[0] ? publicUser(authorRows[0]) : deletedUser(row.authorId, row.createdAt);
+    res.json({
+      message: {
+        id: row.id,
+        room: row.room as Room,
+        author,
+        content: row.content,
+        replyTo: replyQuote(row.replyAuthorName, row.replyText),
+        editedAt: row.editedAt ? toIso(row.editedAt) : null,
+        reactions: reactionCounts(reactionRows, 'message', row.id, u.id),
         createdAt: toIso(row.createdAt),
       } satisfies ChatMessage,
     });
@@ -457,7 +652,56 @@ router.delete(
       throw new HttpError(403, 'Энэ мессежийг зөвхөн зохиогч, том админ эсвэл жижиг админ устгаж болно');
     }
     await db.delete(messages).where(eq(messages.id, id));
+    await db
+      .delete(reactions)
+      .where(and(eq(reactions.targetType, 'message'), eq(reactions.targetId, id)));
     res.status(204).send();
+  }),
+);
+
+// ---------------------------------------------------------------- эможи урвал
+// Нэг хэрэглэгч нэг зүйл дээр нэг л урвал үлдээнэ: ижил эможи дахин
+// дарвал арилна, өөр эможи дарвал солигдоно. Постын ❤️ лайк нь
+// хэвээрээ — энд зөвхөн мессеж / хувь чат / сэтгэгдэлд хамаарна.
+
+router.post(
+  '/reactions',
+  requireAuth,
+  ah(async (req, res) => {
+    const u = req.user as AuthUser;
+    const targetType = String(req.body?.targetType ?? '');
+    const targetId = Number(req.body?.targetId);
+    const emoji = String(req.body?.emoji ?? '');
+    if (targetType !== 'message' && targetType !== 'dm' && targetType !== 'comment') {
+      throw new HttpError(400, 'Урвалын төрөл буруу байна');
+    }
+    if (!Number.isInteger(targetId) || targetId < 1) throw new HttpError(404, 'Бичлэг олдсонгүй');
+    if (!(REACTION_EMOJIS as readonly string[]).includes(emoji)) {
+      throw new HttpError(400, 'Эможи буруу байна');
+    }
+    await requireReactionTarget(targetType, targetId);
+    const existing = await db
+      .select()
+      .from(reactions)
+      .where(
+        and(
+          eq(reactions.userId, u.id),
+          eq(reactions.targetType, targetType),
+          eq(reactions.targetId, targetId),
+        ),
+      )
+      .limit(1);
+    if (existing[0]) {
+      if (existing[0].emoji === emoji) {
+        await db.delete(reactions).where(eq(reactions.id, existing[0].id));
+      } else {
+        await db.update(reactions).set({ emoji }).where(eq(reactions.id, existing[0].id));
+      }
+    } else {
+      await db.insert(reactions).values({ userId: u.id, targetType, targetId, emoji });
+    }
+    const all = await loadAllReactions();
+    res.json({ reactions: reactionCounts(all, targetType, targetId, u.id) });
   }),
 );
 
@@ -539,7 +783,8 @@ router.get(
       .insert(dmReads)
       .values({ userId: u.id, partnerId, lastReadAt: now })
       .onConflictDoUpdate({ target: [dmReads.userId, dmReads.partnerId], set: { lastReadAt: now } });
-    res.json({ messages: rows.map(toDirectMessage) });
+    const reactionRows = await loadAllReactions();
+    res.json({ messages: rows.map((r) => toDirectMessage(r, reactionRows, u.id)) });
   }),
 );
 
@@ -558,11 +803,58 @@ router.post(
     }
     const partnerRows = await db.select({ id: users.id }).from(users).where(eq(users.id, partnerId)).limit(1);
     if (!partnerRows[0]) throw new HttpError(404, 'Хэрэглэгч олдсонгүй');
+    // Хариулж буй мессеж: энэ хоёр хүний хоорондын мессеж байх ёстой.
+    const rawReplyToId = req.body?.replyToId;
+    let replyId: number | null = null;
+    let replyAuthorName: string | null = null;
+    let replyText: string | null = null;
+    if (rawReplyToId !== undefined && rawReplyToId !== null) {
+      replyId = Number(rawReplyToId);
+      if (!Number.isInteger(replyId) || replyId < 1) throw new HttpError(404, 'Хариулж буй мессеж олдсонгүй');
+      const origRows = await db
+        .select()
+        .from(directMessages)
+        .where(
+          and(
+            eq(directMessages.id, replyId),
+            or(
+              and(eq(directMessages.senderId, u.id), eq(directMessages.recipientId, partnerId)),
+              and(eq(directMessages.senderId, partnerId), eq(directMessages.recipientId, u.id)),
+            ),
+          ),
+        )
+        .limit(1);
+      if (!origRows[0]) throw new HttpError(404, 'Хариулж буй мессеж олдсонгүй');
+      const origAuthor = await db.select().from(users).where(eq(users.id, origRows[0].senderId)).limit(1);
+      replyAuthorName = origAuthor[0]?.name ?? 'Устгасан хэрэглэгч';
+      replyText = origRows[0].content;
+    }
     const inserted = await db
       .insert(directMessages)
-      .values({ senderId: u.id, recipientId: partnerId, content })
+      .values({ senderId: u.id, recipientId: partnerId, content, replyToId: replyId, replyAuthorName, replyText })
       .returning();
-    res.status(201).json({ message: toDirectMessage(inserted[0]) });
+    res.status(201).json({ message: toDirectMessage(inserted[0], [], u.id) });
+  }),
+);
+
+// Хувь чатын мессеж засах — зөвхөн зохиогч (1–2000 тэмдэгт).
+router.patch(
+  '/dm/:id',
+  requireAuth,
+  ah(async (req, res) => {
+    const u = req.user as AuthUser;
+    const id = parseId(req, 'Мессеж олдсонгүй');
+    const content = validateContent(req.body, 2000, 'Мессеж 1–2000 тэмдэгт байх ёстой');
+    const rows = await db.select().from(directMessages).where(eq(directMessages.id, id)).limit(1);
+    if (!rows[0]) throw new HttpError(404, 'Мессеж олдсонгүй');
+    requireAuthor(u, rows[0].senderId);
+    const updated = await db
+      .update(directMessages)
+      .set({ content, editedAt: new Date() })
+      .where(eq(directMessages.id, id))
+      .returning();
+    const reactionRows = await loadAllReactions();
+    res.json({ message: toDirectMessage(updated[0], reactionRows, u.id) });
   }),
 );
 
@@ -578,96 +870,21 @@ router.delete(
       throw new HttpError(403, 'Энэ мессежийг зөвхөн зохиогч, том админ эсвэл жижиг админ устгаж болно');
     }
     await db.delete(directMessages).where(eq(directMessages.id, id));
+    await db
+      .delete(reactions)
+      .where(and(eq(reactions.targetType, 'dm'), eq(reactions.targetId, id)));
     res.status(204).send();
   }),
 );
 
-// ---------------------------------------------------------------- зөвшөөрөлтэй өрөөний хүсэлт
-
-router.post(
-  '/rooms/private/request',
-  requireAuth,
-  ah(async (req, res) => {
-    const u = req.user as AuthUser;
-    if (u.role === 'admin' || u.role === 'moderator') {
-      res.json({ status: 'approved' as AccessStatus, note: 'Танд аль хэдийн зөвшөөрөл байгаа' });
-      return;
-    }
-    const existing = await loadAccess(u.id);
-    if (existing?.status === 'approved') {
-      res.json({ status: 'approved' as AccessStatus });
-      return;
-    }
-    if (existing) {
-      // Татгалзсан бол дахин хүсэлт илгээж болно.
-      await db.update(roomAccess).set({ status: 'pending', decidedAt: null }).where(eq(roomAccess.id, existing.id));
-      res.json({ status: 'pending' as AccessStatus });
-      return;
-    }
-    await db.insert(roomAccess).values({ userId: u.id, status: 'pending' });
-    res.status(201).json({ status: 'pending' as AccessStatus });
-  }),
-);
-
-router.get(
-  '/rooms/private/my-access',
-  requireAuth,
-  ah(async (req, res) => {
-    const u = req.user as AuthUser;
-    if (u.role === 'admin' || u.role === 'moderator') {
-      res.json({ status: 'approved' as AccessStatus });
-      return;
-    }
-    const row = await loadAccess(u.id);
-    res.json({ status: (row?.status ?? 'none') as AccessStatus | 'none' });
-  }),
-);
-
-// ---------------------------------------------------------------- админ: гишүүд, хүсэлт, жижиг админ
+// ---------------------------------------------------------------- админ: гишүүд, жижиг админ
 
 router.get('/admin/users', requireAuth, requireAdminOrBanModerator, ah(async (_req, res) => {
   const userRows = await db.select().from(users).orderBy(asc(users.createdAt));
-  const accessRows = await db.select().from(roomAccess);
-  const accessByUser = new Map(accessRows.map((a) => [a.userId, a.status as AccessStatus]));
   const members: MemberRow[] = userRows.map((u) => ({
     user: publicUser(u),
-    privateAccess: u.role === 'admin' || u.role === 'moderator' ? 'auto' : (accessByUser.get(u.id) ?? 'none'),
   }));
   res.json({ users: members });
-}));
-
-router.get('/admin/access-requests', requireAuth, requireAdmin, ah(async (_req, res) => {
-  const rows = await db
-    .select()
-    .from(roomAccess)
-    .where(eq(roomAccess.status, 'pending'))
-    .orderBy(asc(roomAccess.createdAt));
-  const userRows = await db.select().from(users);
-  const userById = new Map(userRows.map((u) => [u.id, publicUser(u)]));
-  const requests: AccessRequest[] = rows
-    .map((r) => {
-      const user = userById.get(r.userId);
-      if (!user) return null;
-      return { id: r.id, user, status: r.status as AccessStatus, createdAt: toIso(r.createdAt) };
-    })
-    .filter((r): r is AccessRequest => r !== null);
-  res.json({ requests });
-}));
-
-async function decideAccess(id: number, status: 'approved' | 'denied'): Promise<void> {
-  const rows = await db.select().from(roomAccess).where(eq(roomAccess.id, id)).limit(1);
-  if (!rows[0]) throw new HttpError(404, 'Хүсэлт олдсонгүй');
-  await db.update(roomAccess).set({ status, decidedAt: new Date() }).where(eq(roomAccess.id, id));
-}
-
-router.post('/admin/access-requests/:id/approve', requireAuth, requireAdmin, ah(async (req, res) => {
-  await decideAccess(parseId(req, 'Хүсэлт олдсонгүй'), 'approved');
-  res.json({ status: 'approved' as AccessStatus });
-}));
-
-router.post('/admin/access-requests/:id/deny', requireAuth, requireAdmin, ah(async (req, res) => {
-  await decideAccess(parseId(req, 'Хүсэлт олдсонгүй'), 'denied');
-  res.json({ status: 'denied' as AccessStatus });
 }));
 
 async function setModerator(id: number, role: 'moderator' | 'member'): Promise<User> {
