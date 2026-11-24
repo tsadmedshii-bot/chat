@@ -1,7 +1,8 @@
 // Чат — тогтмол цэвэрлэгээний ажил (in-process, 60 секунд тутамд).
 // Сервер нь Railway дээр ганц instance-аар ажилладаг тул setInterval хангалттай.
 // 1) 15 минутаас хуучин өрөөний болон хувь чатын мессежийг устгана
-//    (постод хамаарахгүй — постууд хэвээрээ үлдэнэ).
+//    (постод хамаарахгүй — постууд хэвээрээ үлдэнэ). Угтах мессеж нь
+//    1 цаг (60 минут) харагдана — шинэ гишүүнийг бүгд харж амжихын тулд.
 // 2) Хугацаа нь дууссан хугацаатай банг тайлж, бангийн түүхийг
 //    auto_expired гэж тэмдэглэнэ (байнга банд хүрэхгүй).
 // Юу ч устгаж/тайлаагүй үед лог бичихгүй — лог спам үүсгэхгүйн тулд.
@@ -10,16 +11,20 @@ import { sql } from 'drizzle-orm';
 import { db } from './db';
 
 const MESSAGE_TTL = "interval '15 minutes'";
+/** Угтах мессеж нь энгийн мессежээс удаан — 1 цаг харагдана. */
+const WELCOME_TTL = "interval '60 minutes'";
 const DEFAULT_INTERVAL_MS = 60_000;
 
 export interface CleanupResult {
   deletedMessages: number;
+  deletedWelcome: number;
   deletedDms: number;
   expiredBans: number;
 }
 
 export async function runCleanup(): Promise<CleanupResult> {
-  const msg = await db.execute(sql.raw(`DELETE FROM messages WHERE created_at < now() - ${MESSAGE_TTL}`));
+  const msg = await db.execute(sql.raw(`DELETE FROM messages WHERE kind <> 'welcome' AND created_at < now() - ${MESSAGE_TTL}`));
+  const welcome = await db.execute(sql.raw(`DELETE FROM messages WHERE kind = 'welcome' AND created_at < now() - ${WELCOME_TTL}`));
   const dm = await db.execute(sql.raw(`DELETE FROM direct_messages WHERE created_at < now() - ${MESSAGE_TTL}`));
   // Устсан мессеж/сэтгэгдэл дээр үлдсэн өнчин урвалуудыг арилгана.
   await db.execute(
@@ -54,12 +59,13 @@ export async function runCleanup(): Promise<CleanupResult> {
   }
   const result: CleanupResult = {
     deletedMessages: msg.rowCount ?? 0,
+    deletedWelcome: welcome.rowCount ?? 0,
     deletedDms: dm.rowCount ?? 0,
     expiredBans: expiredCount,
   };
-  if (result.deletedMessages > 0 || result.deletedDms > 0 || result.expiredBans > 0) {
+  if (result.deletedMessages > 0 || result.deletedWelcome > 0 || result.deletedDms > 0 || result.expiredBans > 0) {
     console.log(
-      `Цэвэрлэгээ: ${result.deletedMessages} өрөөний мессеж, ${result.deletedDms} хувь чат, ${result.expiredBans} бангийн хугацаа дууслаа.`,
+      `Цэвэрлэгээ: ${result.deletedMessages} өрөөний мессеж, ${result.deletedWelcome} угтах мессеж, ${result.deletedDms} хувь чат, ${result.expiredBans} бангийн хугацаа дууслаа.`,
     );
   }
   return result;
