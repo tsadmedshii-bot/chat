@@ -15,6 +15,11 @@ export interface User {
   bannedUntil: string | null;
   /** Жижиг админд бандах эрх олгосон эсэх (зөвхөн moderator-д хамаарна). */
   canBan: boolean;
+  /** Жижиг админд өнгө/фонт сонгох эрх олгосон эсэх (зөвхөн moderator-д хамаарна). */
+  canStyle: boolean;
+  /** Жижиг админы сонгосон фонтын түлхүүр — эрх нь байж байж л
+      харагдана, байхгүй бол null. */
+  textFont: string | null;
   /** Профайл зураг (data URL) — байхгүй бол null. */
   avatar: string | null;
   /** Бичлэгийн өнгө ('#RRGGBB') — зөвхөн том админ онооно, байхгүй бол null. */
@@ -31,6 +36,24 @@ export type Room = 'public';
 
 /** Эможи урвалын зөвшөөрөгдсөн багц (өрөөний мессеж, хувь чат, сэтгэгдэлд). */
 export const REACTION_EMOJIS = ['❤️', '😂', '👍', '😮', '😢', '😡', '🔥', '🎉'] as const;
+
+/** Жижиг админы сонгож болох 7 гоёмсог фонт — бүгд Кирилл (Монгол) +
+    Латин (Англи) дэмждэг нь Google Fonts-оор баталгаажсан.
+    Playfair Display энд байхгүй — тэр нь зөвхөн том админых. */
+export const STYLE_FONTS = [
+  { key: 'lobster', name: 'Lobster', cssClass: 'font-lobster' },
+  { key: 'pacifico', name: 'Pacifico', cssClass: 'font-pacifico' },
+  { key: 'caveat', name: 'Caveat', cssClass: 'font-caveat' },
+  { key: 'cormorant', name: 'Cormorant Garamond', cssClass: 'font-cormorant' },
+  { key: 'comfortaa', name: 'Comfortaa', cssClass: 'font-comfortaa' },
+  { key: 'yeseva', name: 'Yeseva One', cssClass: 'font-yeseva' },
+  { key: 'neucha', name: 'Neucha', cssClass: 'font-neucha' },
+] as const;
+
+export type TextFontKey = (typeof STYLE_FONTS)[number]['key'];
+
+/** Сервер талд фонтын түлхүүр зөв эсэхийг шалгахад хэрэглэнэ. */
+export const TEXT_FONT_KEYS: readonly string[] = STYLE_FONTS.map((f) => f.key);
 
 export type ReactionTargetType = 'message' | 'dm' | 'comment';
 
