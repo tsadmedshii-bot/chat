@@ -26,15 +26,37 @@ export interface User {
   createdAt: string;
 }
 
-export type Room = 'public' | 'private';
+/** Одоо зөвхөн нийтийн өрөө л байна — зөвшөөрөлтэй өрөөг хаасан. */
+export type Room = 'public';
 
-export type AccessStatus = 'pending' | 'approved' | 'denied';
+/** Эможи урвалын зөвшөөрөгдсөн багц (өрөөний мессеж, хувь чат, сэтгэгдэлд). */
+export const REACTION_EMOJIS = ['❤️', '😂', '👍', '😮', '😢', '😡', '🔥', '🎉'] as const;
+
+export type ReactionTargetType = 'message' | 'dm' | 'comment';
+
+/** Нэг эможигийн тоо + би өөрөө дарсан эсэх. */
+export interface ReactionCount {
+  emoji: string;
+  count: number;
+  reactedByMe: boolean;
+}
+
+/** Хариултын эшлэл — эх текстийн snapshot (нэр + текст). Эх нь
+    15 минутын дараа устахад ч эшлэл уншигдах хэвээр байна. */
+export interface ReplyQuote {
+  authorName: string;
+  text: string;
+}
 
 export interface PostComment {
   id: number;
   postId: number;
   author: User;
   content: string;
+  replyTo: ReplyQuote | null;
+  /** Зассан цаг (ISO) — засагдаагүй бол null. */
+  editedAt: string | null;
+  reactions: ReactionCount[];
   createdAt: string;
 }
 
@@ -45,6 +67,8 @@ export interface Post {
   likeCount: number;
   likedByMe: boolean;
   comments: PostComment[];
+  /** Зассан цаг (ISO) — засагдаагүй бол null. */
+  editedAt: string | null;
   createdAt: string;
 }
 
@@ -53,20 +77,15 @@ export interface ChatMessage {
   room: Room;
   author: User;
   content: string;
-  createdAt: string;
-}
-
-export interface AccessRequest {
-  id: number;
-  user: User;
-  status: AccessStatus;
+  replyTo: ReplyQuote | null;
+  /** Зассан цаг (ISO) — засагдаагүй бол null. */
+  editedAt: string | null;
+  reactions: ReactionCount[];
   createdAt: string;
 }
 
 export interface MemberRow {
   user: User;
-  /** Зөвшөөрөлтэй өрөөнд нэвтрэх эрх: админ/жижиг админ автоматаар 'approved'. */
-  privateAccess: AccessStatus | 'auto' | 'none';
 }
 
 /** Бангийн түүхийн нэг бичлэг (зөвхөн том админ харна). */
@@ -91,6 +110,10 @@ export interface DirectMessage {
   senderId: number;
   recipientId: number;
   content: string;
+  replyTo: ReplyQuote | null;
+  /** Зассан цаг (ISO) — засагдаагүй бол null. */
+  editedAt: string | null;
+  reactions: ReactionCount[];
   createdAt: string;
 }
 
