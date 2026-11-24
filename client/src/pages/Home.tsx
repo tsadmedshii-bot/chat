@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { Post, User } from '../../../shared/src/types';
-import { ApiError, addComment, createPost, deletePost, listPosts, toggleLike } from '../api';
+import type { Post, PostComment, User } from '../../../shared/src/types';
+import { ApiError, addComment, createPost, deletePost, editComment, editPost, listPosts, toggleLike, toggleReaction } from '../api';
 import EmojiPicker from '../components/EmojiPicker';
+import { EditedMark, ReactionBar, ReplyQuoteView } from '../components/MessageParts';
 import UserName, { Avatar } from '../components/UserBadge';
 
 function timeAgo(iso: string): string {
@@ -20,6 +21,13 @@ export default function Home({ user, onViewProfile }: { user: User; onViewProfil
   const [commentDrafts, setCommentDrafts] = useState<Record<number, string>>({});
   const [showEmoji, setShowEmoji] = useState(false);
   const [commentEmojiFor, setCommentEmojiFor] = useState<number | null>(null);
+  // Хариулж буй сэтгэгдэл — пост тус бүрээр нэг.
+  const [replyToComment, setReplyToComment] = useState<Record<number, PostComment | null>>({});
+  // Засаж буй пост / сэтгэгдэл.
+  const [editingPostId, setEditingPostId] = useState<number | null>(null);
+  const [editingPostDraft, setEditingPostDraft] = useState('');
+  const [editingCommentId, setEditingCommentId] = useState<number | null>(null);
+  const [editingCommentDraft, setEditingCommentDraft] = useState('');
   const [error, setError] = useState('');
 
   const refresh = useCallback(async () => {
@@ -74,14 +82,69 @@ export default function Home({ user, onViewProfile }: { user: User; onViewProfil
     const text = (commentDrafts[postId] ?? '').trim();
     if (!text) return;
     try {
-      const comment = await addComment(postId, text);
+      const replyTo = replyToComment[postId] ?? null;
+      const comment = await addComment(postId, text, replyTo?.id ?? null);
       setPosts((prev) =>
         prev.map((p) => (p.id === postId ? { ...p, comments: [...p.comments, comment] } : p)),
       );
       setCommentDrafts((prev) => ({ ...prev, [postId]: '' }));
+      setReplyToComment((prev) => ({ ...prev, [postId]: null }));
       setCommentEmojiFor(null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Сэтгэгдэл бичихэд алдаа гарлаа.');
+    }
+  }
+
+  function startEditPost(post: Post): void {
+    setEditingPostId(post.id);
+    setEditingPostDraft(post.content);
+  }
+
+  async function saveEditPost(post: Post): Promise<void> {
+    const text = editingPostDraft.trim();
+    if (!text) return;
+    try {
+      const updated = await editPost(post.id, text);
+      setPosts((prev) => prev.map((p) => (p.id === post.id ? updated : p)));
+      setEditingPostId(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Пост засахад алдаа гарлаа.');
+    }
+  }
+
+  function startEditComment(c: PostComment): void {
+    setEditingCommentId(c.id);
+    setEditingCommentDraft(c.content);
+  }
+
+  async function saveEditComment(postId: number, c: PostComment): Promise<void> {
+    const text = editingCommentDraft.trim();
+    if (!text) return;
+    try {
+      const updated = await editComment(c.id, text);
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === postId ? { ...p, comments: p.comments.map((x) => (x.id === c.id ? updated : x)) } : p,
+        ),
+      );
+      setEditingCommentId(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Сэтгэгдэл засахад алдаа гарлаа.');
+    }
+  }
+
+  async function onReactComment(postId: number, commentId: number, emoji: string): Promise<void> {
+    try {
+      const reactions = await toggleReaction('comment', commentId, emoji);
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === postId
+            ? { ...p, comments: p.comments.map((x) => (x.id === commentId ? { ...x, reactions } : x)) }
+            : p,
+        ),
+      );
+    } catch {
+      // Урвал дарахад алдаа гарвал чимээгүй өнгөрнө.
     }
   }
 
@@ -131,15 +194,42 @@ export default function Home({ user, onViewProfile }: { user: User; onViewProfil
             <Avatar user={post.author} showDot onClick={() => onViewProfile(post.author.id)} />
             <div className="post-meta">
               <UserName user={post.author} />
-              <span className="post-time">{timeAgo(post.createdAt)}</span>
+              <span className="post-time">
+                {timeAgo(post.createdAt)}
+                <EditedMark editedAt={post.editedAt} />
+              </span>
             </div>
+            {post.author.id === user.id && editingPostId !== post.id && (
+              <button type="button" className="btn-ghost small" onClick={() => startEditPost(post)} title="Засах">
+                ✏️
+              </button>
+            )}
             {canDelete(post) && (
               <button type="button" className="btn-danger-ghost" onClick={() => void onDeletePost(post)}>
                 Устгах
               </button>
             )}
           </header>
-          <p className="post-content">{post.content}</p>
+          {editingPostId === post.id ? (
+            <div className="edit-box">
+              <textarea
+                value={editingPostDraft}
+                onChange={(e) => setEditingPostDraft(e.target.value)}
+                rows={3}
+                autoFocus
+              />
+              <div className="edit-actions">
+                <button type="button" className="btn-primary small" onClick={() => void saveEditPost(post)} disabled={!editingPostDraft.trim()}>
+                  Хадгалах
+                </button>
+                <button type="button" className="btn-ghost small" onClick={() => setEditingPostId(null)}>
+                  Цуцлах
+                </button>
+              </div>
+            </div>
+          ) : (
+            <p className="post-content">{post.content}</p>
+          )}
           <div className="post-actions">
             <button
               type="button"
@@ -156,10 +246,63 @@ export default function Home({ user, onViewProfile }: { user: User; onViewProfil
                 <Avatar user={c.author} size="small" showDot onClick={() => onViewProfile(c.author.id)} />
                 <div className="comment-body">
                   <UserName user={c.author} />
-                  <p>{c.content}</p>
+                  {c.replyTo && <ReplyQuoteView quote={c.replyTo} />}
+                  {editingCommentId === c.id ? (
+                    <div className="edit-box">
+                      <textarea
+                        value={editingCommentDraft}
+                        onChange={(e) => setEditingCommentDraft(e.target.value)}
+                        rows={2}
+                        autoFocus
+                      />
+                      <div className="edit-actions">
+                        <button type="button" className="btn-primary small" onClick={() => void saveEditComment(post.id, c)} disabled={!editingCommentDraft.trim()}>
+                          Хадгалах
+                        </button>
+                        <button type="button" className="btn-ghost small" onClick={() => setEditingCommentId(null)}>
+                          Цуцлах
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p>{c.content}</p>
+                  )}
+                  <span className="message-time">
+                    {timeAgo(c.createdAt)}
+                    <EditedMark editedAt={c.editedAt} />
+                  </span>
+                  <ReactionBar reactions={c.reactions} onToggle={(e) => void onReactComment(post.id, c.id, e)} />
+                  <div className="comment-actions">
+                    <button
+                      type="button"
+                      className="btn-ghost small"
+                      onClick={() => setReplyToComment((prev) => ({ ...prev, [post.id]: c }))}
+                      title="Хариулах"
+                    >
+                      ↩️ Хариулах
+                    </button>
+                    {c.author.id === user.id && editingCommentId !== c.id && (
+                      <button type="button" className="btn-ghost small" onClick={() => startEditComment(c)} title="Засах">
+                        ✏️ Засах
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}
+            {replyToComment[post.id] && (
+              <div className="reply-bar">
+                <span>
+                  ↩️ <strong>{replyToComment[post.id]!.author.name}</strong>-д хариулах:{' '}
+                  {replyToComment[post.id]!.content.length > 80
+                    ? `${replyToComment[post.id]!.content.slice(0, 80)}…`
+                    : replyToComment[post.id]!.content}
+                </span>
+                <button type="button" className="btn-ghost small" onClick={() => setReplyToComment((prev) => ({ ...prev, [post.id]: null }))} title="Цуцлах">
+                  ✕
+                </button>
+              </div>
+            )}
             <div className="comment-form">
               <input
                 value={commentDrafts[post.id] ?? ''}
@@ -170,7 +313,7 @@ export default function Home({ user, onViewProfile }: { user: User; onViewProfil
                     void submitComment(post.id);
                   }
                 }}
-                placeholder="Сэтгэгдэл бичих…"
+                placeholder={replyToComment[post.id] ? 'Хариу бичих…' : 'Сэтгэгдэл бичих…'}
               />
               <button
                 type="button"
