@@ -1,5 +1,5 @@
 // Чат — API клиент (same-origin; Vite dev нь /api-г localhost:3001 рүү proxy хийдэг).
-import type { AccessRequest, AccessStatus, BanLog, ChatMessage, DirectConversation, DirectMessage, MemberRow, Post, PostComment, Room, User, UserProfile } from '../../shared/src/types';
+import type { BanLog, ChatMessage, DirectConversation, DirectMessage, MemberRow, Post, PostComment, ReactionCount, ReactionTargetType, User, UserProfile } from '../../shared/src/types';
 
 const TOKEN_KEY = 'chat_token';
 
@@ -143,8 +143,19 @@ export async function toggleLike(postId: number): Promise<{ liked: boolean; like
   return api<{ liked: boolean; likeCount: number }>(`/api/posts/${postId}/like`, { method: 'POST' });
 }
 
-export async function addComment(postId: number, content: string): Promise<PostComment> {
-  const data = await api<PostComment | { comment: PostComment }>(`/api/posts/${postId}/comments`, jsonBody({ content }));
+export async function addComment(postId: number, content: string, replyToId?: number | null): Promise<PostComment> {
+  const data = await api<PostComment | { comment: PostComment }>(
+    `/api/posts/${postId}/comments`,
+    jsonBody({ content, replyToId: replyToId ?? null }),
+  );
+  return unwrapOne(data);
+}
+
+export async function editComment(commentId: number, content: string): Promise<PostComment> {
+  const data = await api<PostComment | { comment: PostComment }>(`/api/comments/${commentId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ content }),
+  });
   return unwrapOne(data);
 }
 
@@ -152,13 +163,33 @@ export async function deletePost(postId: number): Promise<void> {
   await api<void>(`/api/posts/${postId}`, { method: 'DELETE' });
 }
 
-export async function listMessages(room: Room): Promise<ChatMessage[]> {
-  const data = await api<ChatMessage[] | { messages: ChatMessage[] }>(`/api/rooms/${room}/messages`);
+export async function editPost(postId: number, content: string): Promise<Post> {
+  const data = await api<Post | { post: Post }>(`/api/posts/${postId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ content }),
+  });
+  return unwrapOne(data);
+}
+
+/** Нийтийн чатын мессежүүд (одоо зөвхөн нийтийн өрөө л байна). */
+export async function listMessages(): Promise<ChatMessage[]> {
+  const data = await api<ChatMessage[] | { messages: ChatMessage[] }>('/api/rooms/public/messages');
   return unwrapList(data);
 }
 
-export async function sendMessage(room: Room, content: string): Promise<ChatMessage> {
-  const data = await api<ChatMessage | { message: ChatMessage }>(`/api/rooms/${room}/messages`, jsonBody({ content }));
+export async function sendMessage(content: string, replyToId?: number | null): Promise<ChatMessage> {
+  const data = await api<ChatMessage | { message: ChatMessage }>(
+    '/api/rooms/public/messages',
+    jsonBody({ content, replyToId: replyToId ?? null }),
+  );
+  return unwrapOne(data);
+}
+
+export async function editMessage(messageId: number, content: string): Promise<ChatMessage> {
+  const data = await api<ChatMessage | { message: ChatMessage }>(`/api/messages/${messageId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ content }),
+  });
   return unwrapOne(data);
 }
 
@@ -166,32 +197,22 @@ export async function deleteMessage(messageId: number): Promise<void> {
   await api<void>(`/api/messages/${messageId}`, { method: 'DELETE' });
 }
 
-export async function requestPrivateAccess(): Promise<AccessStatus> {
-  const data = await api<{ status: AccessStatus }>('/api/rooms/private/request', { method: 'POST' });
-  return data.status;
-}
-
-export async function myPrivateAccess(): Promise<AccessStatus | 'none'> {
-  const data = await api<{ status: AccessStatus | 'none' }>('/api/rooms/private/my-access');
-  return data.status;
+/** Эможи урвал — ижил эможи дахин дарвал арилна, өөр эможи дарвал солигдоно. */
+export async function toggleReaction(
+  targetType: ReactionTargetType,
+  targetId: number,
+  emoji: string,
+): Promise<ReactionCount[]> {
+  const data = await api<{ reactions: ReactionCount[] }>(
+    '/api/reactions',
+    jsonBody({ targetType, targetId, emoji }),
+  );
+  return data.reactions;
 }
 
 export async function adminListMembers(): Promise<MemberRow[]> {
   const data = await api<MemberRow[] | { users: MemberRow[] }>('/api/admin/users');
   return unwrapList(data);
-}
-
-export async function adminListAccessRequests(): Promise<AccessRequest[]> {
-  const data = await api<AccessRequest[] | { requests: AccessRequest[] }>('/api/admin/access-requests');
-  return unwrapList(data);
-}
-
-export async function adminApproveAccess(requestId: number): Promise<void> {
-  await api<void>(`/api/admin/access-requests/${requestId}/approve`, { method: 'POST' });
-}
-
-export async function adminDenyAccess(requestId: number): Promise<void> {
-  await api<void>(`/api/admin/access-requests/${requestId}/deny`, { method: 'POST' });
 }
 
 export async function adminGrantModerator(userId: number): Promise<User> {
@@ -286,8 +307,19 @@ export async function listDmMessages(userId: number): Promise<DirectMessage[]> {
   return unwrapList(data);
 }
 
-export async function sendDm(userId: number, content: string): Promise<DirectMessage> {
-  const data = await api<DirectMessage | { message: DirectMessage }>(`/api/dm/${userId}`, jsonBody({ content }));
+export async function sendDm(userId: number, content: string, replyToId?: number | null): Promise<DirectMessage> {
+  const data = await api<DirectMessage | { message: DirectMessage }>(
+    `/api/dm/${userId}`,
+    jsonBody({ content, replyToId: replyToId ?? null }),
+  );
+  return unwrapOne(data);
+}
+
+export async function editDm(messageId: number, content: string): Promise<DirectMessage> {
+  const data = await api<DirectMessage | { message: DirectMessage }>(`/api/dm/${messageId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ content }),
+  });
   return unwrapOne(data);
 }
 
