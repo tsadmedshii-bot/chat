@@ -34,6 +34,13 @@ export interface User {
 /** Одоо зөвхөн нийтийн өрөө л байна — зөвшөөрөлтэй өрөөг хаасан. */
 export type Room = 'public';
 
+/** Өрөөний мессежийн төрөл: 'user' = энгийн мессеж,
+    'welcome' = шинэ гишүүн бүртгүүлэхэд гардаг системийн угтах мессеж. */
+export type MessageKind = 'user' | 'welcome';
+
+/** Системийн бичлэгийн (угтах мессеж, хариултын эшлэл) харагдах нэр. */
+export const SYSTEM_NAME = 'Систем';
+
 /** Эможи урвалын зөвшөөрөгдсөн багц (өрөөний мессеж, хувь чат, сэтгэгдэлд). */
 export const REACTION_EMOJIS = ['❤️', '😂', '👍', '😮', '😢', '😡', '🔥', '🎉'] as const;
 
@@ -98,7 +105,9 @@ export interface Post {
 export interface ChatMessage {
   id: number;
   room: Room;
-  author: User;
+  kind: MessageKind;
+  /** Зохиогч — угтах мессежид хүн зохиогч байхгүй тул null. */
+  author: User | null;
   content: string;
   replyTo: ReplyQuote | null;
   /** Зассан цаг (ISO) — засагдаагүй бол null. */
