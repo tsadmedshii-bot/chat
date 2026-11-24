@@ -28,6 +28,8 @@ export default function Direct({
   const firstLoadRef = useRef(true);
   // Өөрөө мессеж илгээхэд заавал доош гүйлгэнэ (Rooms-той ижил дүрэм).
   const forceScrollRef = useRef(false);
+  // Сүүлд харсан мессежийн тоо — шинэ мессеж ирснийг танихдаа хэрэглэнэ.
+  const lastCountRef = useRef(0);
 
   const refreshConversations = useCallback(async () => {
     try {
@@ -83,19 +85,18 @@ export default function Direct({
     onPartnerOpened();
   }, [initialPartnerId, loadThread, onPartnerOpened]);
 
-  // Шинэ мессеж ирэхэд: шинэ thread нээх, эсвэл өөрөө илгээсэн бол заавал
-  // доош гүйлгэнэ; бусдын мессеж ирэхэд зөвхөн доод талд нь байвал дагана —
-  // хэрэглэгч дээш гүйлгэж хуучин мессеж уншиж байхад нь тасалдуулахгүй.
-  // (Өмнө нь мессеж болгон дээр нөхцөлгүй гүйлгэдэг байсан — хуучин мессеж
-  // уншиж байхад ч доош нь татдаг байсан.)
+  // Шинэ мессеж ирэхэд заавал доош гүйлгэнэ — хэн бичсэнээс үл хамааран
+  // сүүлийн чатыг гараар скролдож харах шаардлагагүй. Мессеж ирээгүй
+  // шинэчлэлт (5 секунд тутамд) бол гүйлгэхгүй.
   useEffect(() => {
-    const el = listRef.current;
-    if (!el) return;
+    const grew = messages.length > lastCountRef.current;
     const force = forceScrollRef.current;
     forceScrollRef.current = false;
-    const nearBottom = firstLoadRef.current || force || el.scrollHeight - el.scrollTop - el.clientHeight < 150;
-    firstLoadRef.current = false;
-    if (nearBottom) bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    lastCountRef.current = messages.length;
+    if (firstLoadRef.current || grew || force) {
+      firstLoadRef.current = false;
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [messages]);
 
   const selected = conversations.find((c) => c.user.id === selectedId) ?? null;
