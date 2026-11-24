@@ -31,6 +31,8 @@ export const posts = pgTable('posts', {
   id: serial('id').primaryKey(),
   authorId: integer('author_id').notNull().references(() => users.id),
   content: text('content').notNull(),
+  /** Зассан цаг — NULL = засагдаагүй. */
+  editedAt: timestamp('edited_at'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
@@ -46,6 +48,15 @@ export const postComments = pgTable('post_comments', {
   postId: integer('post_id').notNull().references(() => posts.id, { onDelete: 'cascade' }),
   authorId: integer('author_id').notNull().references(() => users.id),
   content: text('content').notNull(),
+  /** Хариулж буй сэтгэгдэл — snapshot (нэр + текст) хадгална.
+      Гадаад түлхүүр (ON DELETE SET NULL) нь зөвхөн шилжилт 0005-д
+      байгаа — schema-д өөрөөсөө хамаарах references нь TypeScript-ийн
+      мөчлөгт төрлийн алдаа үүсгэдэг тул энд энгийн баганаар тэмдэглэнэ. */
+  replyToId: integer('reply_to_id'),
+  replyAuthorName: text('reply_author_name'),
+  replyText: text('reply_text'),
+  /** Зассан цаг — NULL = засагдаагүй. */
+  editedAt: timestamp('edited_at'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
@@ -54,8 +65,28 @@ export const messages = pgTable('messages', {
   room: varchar('room', { length: 10 }).notNull(),
   authorId: integer('author_id').notNull().references(() => users.id),
   content: text('content').notNull(),
+  /** Хариулж буй мессеж — snapshot (нэр + текст) хадгална.
+      Гадаад түлхүүр (ON DELETE SET NULL) нь зөвхөн шилжилт 0005-д
+      байгаа (дээрх тайлбарыг харна уу). */
+  replyToId: integer('reply_to_id'),
+  replyAuthorName: text('reply_author_name'),
+  replyText: text('reply_text'),
+  /** Зассан цаг — NULL = засагдаагүй. Засвар нь 15 минутын устгах
+      цагийг сунгадаггүй (created_at хэвээрээ). */
+  editedAt: timestamp('edited_at'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
+
+/** Эможи урвал — нэг хэрэглэгч нэг зүйл дээр нэг л урвал үлдээнэ.
+    target_type: 'message' | 'dm' | 'comment'. */
+export const reactions = pgTable('reactions', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id),
+  targetType: varchar('target_type', { length: 20 }).notNull(),
+  targetId: integer('target_id').notNull(),
+  emoji: varchar('emoji', { length: 10 }).notNull(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => [uniqueIndex('reactions_user_target_unique').on(t.userId, t.targetType, t.targetId)]);
 
 export const roomAccess = pgTable('room_access', {
   id: serial('id').primaryKey(),
@@ -86,6 +117,14 @@ export const directMessages = pgTable('direct_messages', {
   senderId: integer('sender_id').notNull().references(() => users.id),
   recipientId: integer('recipient_id').notNull().references(() => users.id),
   content: text('content').notNull(),
+  /** Хариулж буй мессеж — snapshot (нэр + текст) хадгална.
+      Гадаад түлхүүр (ON DELETE SET NULL) нь зөвхөн шилжилт 0005-д
+      байгаа (дээрх тайлбарыг харна уу). */
+  replyToId: integer('reply_to_id'),
+  replyAuthorName: text('reply_author_name'),
+  replyText: text('reply_text'),
+  /** Зассан цаг — NULL = засагдаагүй. */
+  editedAt: timestamp('edited_at'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
