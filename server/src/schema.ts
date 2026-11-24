@@ -69,7 +69,11 @@ export const postComments = pgTable('post_comments', {
 export const messages = pgTable('messages', {
   id: serial('id').primaryKey(),
   room: varchar('room', { length: 10 }).notNull(),
-  authorId: integer('author_id').notNull().references(() => users.id),
+  /** Мессежийн төрөл: 'user' = энгийн мессеж, 'welcome' = шинэ гишүүн
+      бүртгүүлэхэд гардаг системийн угтах мессеж. */
+  kind: varchar('kind', { length: 10 }).notNull().default('user'),
+  /** Зохиогч — угтах мессежид хүн зохиогч байхгүй тул NULL байж болно. */
+  authorId: integer('author_id').references(() => users.id),
   content: text('content').notNull(),
   /** Хариулж буй мессеж — snapshot (нэр + текст) хадгална.
       Гадаад түлхүүр (ON DELETE SET NULL) нь зөвхөн шилжилт 0005-д
