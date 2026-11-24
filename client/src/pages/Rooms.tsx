@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ChatMessage, User } from '../../../shared/src/types';
 import { ApiError, deleteMessage, editMessage, listMessages, sendMessage, toggleReaction } from '../api';
 import EmojiPicker from '../components/EmojiPicker';
-import { EditedMark, ReactionBar, ReplyQuoteView } from '../components/MessageParts';
+import { EditedMark, ReactionBar, ReplyQuoteView, authorFontClass } from '../components/MessageParts';
 import UserName, { Avatar } from '../components/UserBadge';
 
 export default function Rooms({ user, onViewProfile }: { user: User; onViewProfile: (userId: number) => void }) {
@@ -152,7 +152,7 @@ export default function Rooms({ user, onViewProfile }: { user: User; onViewProfi
                 </div>
               ) : (
                 <p
-                  className={m.author.role === 'admin' ? 'message-admin' : undefined}
+                  className={authorFontClass(m.author)}
                   style={m.author.textColor ? { color: m.author.textColor } : undefined}
                 >
                   {m.content}
