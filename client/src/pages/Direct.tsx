@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DirectConversation, DirectMessage, User } from '../../../shared/src/types';
-import { ApiError, deleteDm, listDmConversations, listDmMessages, sendDm } from '../api';
+import { ApiError, deleteDm, editDm, listDmConversations, listDmMessages, sendDm, toggleReaction } from '../api';
+import { EditedMark, ReactionBar, ReplyQuoteView } from '../components/MessageParts';
 import { Avatar } from '../components/UserBadge';
 
 export default function Direct({
@@ -18,6 +19,9 @@ export default function Direct({
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [messages, setMessages] = useState<DirectMessage[]>([]);
   const [draft, setDraft] = useState('');
+  const [replyTo, setReplyTo] = useState<DirectMessage | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editDraft, setEditDraft] = useState('');
   const [error, setError] = useState('');
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
@@ -88,6 +92,8 @@ export default function Direct({
     if (partnerId === selectedId) return;
     setSelectedId(partnerId);
     setMessages([]);
+    setReplyTo(null);
+    setEditingId(null);
     void loadThread(partnerId);
   }
 
@@ -96,12 +102,39 @@ export default function Direct({
     if (!draft.trim() || !selectedId) return;
     setError('');
     try {
-      const msg = await sendDm(selectedId, draft.trim());
+      const msg = await sendDm(selectedId, draft.trim(), replyTo?.id ?? null);
       setMessages((prev) => [...prev, msg]);
       setDraft('');
+      setReplyTo(null);
       await refreshConversations();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Мессеж илгээхэд алдаа гарлаа.');
+    }
+  }
+
+  function startEdit(m: DirectMessage): void {
+    setEditingId(m.id);
+    setEditDraft(m.content);
+  }
+
+  async function saveEdit(m: DirectMessage): Promise<void> {
+    const text = editDraft.trim();
+    if (!text) return;
+    try {
+      const updated = await editDm(m.id, text);
+      setMessages((prev) => prev.map((x) => (x.id === m.id ? updated : x)));
+      setEditingId(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Мессеж засахад алдаа гарлаа.');
+    }
+  }
+
+  async function onReact(m: DirectMessage, emoji: string): Promise<void> {
+    try {
+      const reactions = await toggleReaction('dm', m.id, emoji);
+      setMessages((prev) => prev.map((x) => (x.id === m.id ? { ...x, reactions } : x)));
+    } catch {
+      // Урвал дарахад алдаа гарвал чимээгүй өнгөрнө.
     }
   }
 
@@ -183,30 +216,75 @@ export default function Direct({
                 const sender = m.senderId === user.id ? user : selected.user;
                 return (
                   <div key={m.id} className={m.senderId === user.id ? 'dm-message mine' : 'dm-message'}>
-                    <p
-                      className={sender.role === 'admin' ? 'message-admin' : undefined}
-                      style={sender.textColor ? { color: sender.textColor } : undefined}
-                    >
-                      {m.content}
-                    </p>
-                    <span className="message-time">
-                      {new Date(m.createdAt).toLocaleString('mn-MN', { hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                    {canDelete(m) && (
-                      <button type="button" className="btn-danger-ghost small" onClick={() => void onDelete(m)}>
-                        ✕
+                    <div className="dm-message-body">
+                      {m.replyTo && <ReplyQuoteView quote={m.replyTo} />}
+                      {editingId === m.id ? (
+                        <div className="edit-box">
+                          <textarea
+                            value={editDraft}
+                            onChange={(e) => setEditDraft(e.target.value)}
+                            rows={2}
+                            autoFocus
+                          />
+                          <div className="edit-actions">
+                            <button type="button" className="btn-primary small" onClick={() => void saveEdit(m)} disabled={!editDraft.trim()}>
+                              Хадгалах
+                            </button>
+                            <button type="button" className="btn-ghost small" onClick={() => setEditingId(null)}>
+                              Цуцлах
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <p
+                          className={sender.role === 'admin' ? 'message-admin' : undefined}
+                          style={sender.textColor ? { color: sender.textColor } : undefined}
+                        >
+                          {m.content}
+                        </p>
+                      )}
+                      <span className="message-time">
+                        {new Date(m.createdAt).toLocaleString('mn-MN', { hour: '2-digit', minute: '2-digit' })}
+                        <EditedMark editedAt={m.editedAt} />
+                      </span>
+                      <ReactionBar reactions={m.reactions} onToggle={(e) => void onReact(m, e)} />
+                    </div>
+                    <div className="message-actions">
+                      <button type="button" className="btn-ghost small" onClick={() => setReplyTo(m)} title="Хариулах">
+                        ↩️
                       </button>
-                    )}
+                      {m.senderId === user.id && editingId !== m.id && (
+                        <button type="button" className="btn-ghost small" onClick={() => startEdit(m)} title="Засах">
+                          ✏️
+                        </button>
+                      )}
+                      {canDelete(m) && (
+                        <button type="button" className="btn-danger-ghost small" onClick={() => void onDelete(m)} title="Устгах">
+                          ✕
+                        </button>
+                      )}
+                    </div>
                   </div>
                 );
               })}
               <div ref={bottomRef} />
             </div>
+            {replyTo && (
+              <div className="reply-bar">
+                <span>
+                  ↩️ <strong>{replyTo.senderId === user.id ? 'Өөртөө' : selected.user.name}</strong>-д хариулах:{' '}
+                  {replyTo.content.length > 80 ? `${replyTo.content.slice(0, 80)}…` : replyTo.content}
+                </span>
+                <button type="button" className="btn-ghost small" onClick={() => setReplyTo(null)} title="Цуцлах">
+                  ✕
+                </button>
+              </div>
+            )}
             <form className="message-form" onSubmit={submit}>
               <input
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
-                placeholder={`${selected.user.name}-д мессеж бичих…`}
+                placeholder={replyTo ? 'Хариу бичих…' : `${selected.user.name}-д мессеж бичих…`}
               />
               <button type="submit" className="btn-primary" disabled={!draft.trim()}>
                 Илгээх
