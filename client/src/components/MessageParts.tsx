@@ -1,8 +1,21 @@
 // Хариултын эшлэл + эможи урвал — өрөөний мессеж, хувь чат, сэтгэгдэлд
 // адилхан хэрэглэнэ.
 import { useState } from 'react';
-import { REACTION_EMOJIS } from '../../../shared/src/types';
-import type { ReactionCount, ReplyQuote } from '../../../shared/src/types';
+import { REACTION_EMOJIS, STYLE_FONTS } from '../../../shared/src/types';
+import type { ReactionCount, ReplyQuote, User } from '../../../shared/src/types';
+
+/** Зохиогчийн бичлэгийн фонтын CSS класс — том админ Playfair Display,
+    canStyle эрхтэй жижиг админ өөрийн сонгосон фонт, бусад нь энгийн.
+    Сервер нь эрхгүй хүнд textFont-ийг null гэж буцаадаг тул энд нэмэлт
+    шалгалт хэрэггүй. */
+export function authorFontClass(author: User): string | undefined {
+  if (author.role === 'admin') return 'message-admin';
+  if (author.role === 'moderator' && author.textFont) {
+    const known = STYLE_FONTS.find((f) => f.key === author.textFont);
+    return known ? known.cssClass : undefined;
+  }
+  return undefined;
+}
 
 /** Эшлэл (snapshot) — эх нь устсан ч нэр + текст нь харагдана. */
 export function ReplyQuoteView({ quote }: { quote: ReplyQuote }) {
