@@ -6,8 +6,8 @@ import { db } from './db';
 import { directMessages, dmReads, messages, postComments, postLikes, posts, reactions, roomAccess, sessions, users, banLogs } from './schema';
 import type { AuthUser } from './auth';
 import { createSession, deleteSession, HttpError, banMessage, isBannedNow, registerUser, requireAdmin, requireAuth, verifyPassword } from './auth';
-import type { BanLog, ChatMessage, DirectConversation, DirectMessage, MemberRow, Post, PostComment, ReactionCount, ReactionTargetType, ReplyQuote, Role, Room, User } from '../../shared/src/types';
-import { REACTION_EMOJIS, TEXT_FONT_KEYS } from '../../shared/src/types';
+import type { BanLog, ChatMessage, DirectConversation, DirectMessage, MemberRow, MessageKind, Post, PostComment, ReactionCount, ReactionTargetType, ReplyQuote, Role, Room, User } from '../../shared/src/types';
+import { REACTION_EMOJIS, SYSTEM_NAME, TEXT_FONT_KEYS } from '../../shared/src/types';
 
 export const router = Router();
 
@@ -134,6 +134,21 @@ router.post(
     const { name, username, password } = req.body ?? {};
     const user: AuthUser = await registerUser(String(name ?? ''), String(username ?? ''), String(password ?? ''));
     const token = await createSession(user.id);
+    // Шинэ гишүүн бүртгүүлэхэд нийтийн чатад угтах мессеж гарна (1 цаг харагдана).
+    // Анхны бүртгэл нь эзэн (том админ) өөрөө тул угтах мессеж гаргахгүй.
+    if (user.role !== 'admin') {
+      try {
+        await db.insert(messages).values({
+          room: 'public',
+          kind: 'welcome',
+          authorId: null,
+          content: `🎉 Шинэ гишүүн орж ирлээ! Сайн байна уу, ${user.name}! Таныг халуун дулаанаар угтаж авч байна! 👋✨`,
+        });
+      } catch (err) {
+        // Угтах мессеж бүтэлгүйтсэн ч бүртгэл амжилттай хэвээрээ — зөвхөн лог бичнэ.
+        console.error('Угтах мессеж оруулахад алдаа гарлаа:', err);
+      }
+    }
     res.status(201).json({
       user: publicUser(user),
       token,
@@ -538,16 +553,26 @@ async function listMessages(meId: number): Promise<ChatMessage[]> {
   const userRows = await db.select().from(users);
   const userById = new Map(userRows.map((u) => [u.id, publicUser(u)]));
   const reactionRows = await loadAllReactions();
-  return rows.map((m) => ({
-    id: m.id,
-    room: m.room as Room,
-    author: userById.get(m.authorId) ?? deletedUser(m.authorId, m.createdAt),
-    content: m.content,
-    replyTo: replyQuote(m.replyAuthorName, m.replyText),
-    editedAt: m.editedAt ? toIso(m.editedAt) : null,
-    reactions: reactionCounts(reactionRows, 'message', m.id, meId),
-    createdAt: toIso(m.createdAt),
-  }));
+  return rows.map((m) => {
+    // Угтах мессежид хүн зохиогч байхгүй — author null.
+    const author =
+      m.kind === 'welcome'
+        ? null
+        : m.authorId !== null
+          ? (userById.get(m.authorId) ?? deletedUser(m.authorId, m.createdAt))
+          : deletedUser(0, m.createdAt);
+    return {
+      id: m.id,
+      room: m.room as Room,
+      kind: m.kind as MessageKind,
+      author,
+      content: m.content,
+      replyTo: replyQuote(m.replyAuthorName, m.replyText),
+      editedAt: m.editedAt ? toIso(m.editedAt) : null,
+      reactions: reactionCounts(reactionRows, 'message', m.id, meId),
+      createdAt: toIso(m.createdAt),
+    };
+  });
 }
 
 router.get(
@@ -580,8 +605,17 @@ router.post(
       if (!Number.isInteger(replyId) || replyId < 1) throw new HttpError(404, 'Хариулж буй мессеж олдсонгүй');
       const origRows = await db.select().from(messages).where(eq(messages.id, replyId)).limit(1);
       if (!origRows[0] || origRows[0].room !== 'public') throw new HttpError(404, 'Хариулж буй мессеж олдсонгүй');
-      const origAuthor = await db.select().from(users).where(eq(users.id, origRows[0].authorId)).limit(1);
-      replyAuthorName = origAuthor[0]?.name ?? 'Устгасан хэрэглэгч';
+      // Угтах мессежид хариулах үед эшлэл нь системийн нэртэй байна.
+      if (origRows[0].kind === 'welcome') {
+        replyAuthorName = SYSTEM_NAME;
+      } else {
+        const origAuthorId = origRows[0].authorId;
+        const origAuthor =
+          origAuthorId === null
+            ? []
+            : await db.select().from(users).where(eq(users.id, origAuthorId)).limit(1);
+        replyAuthorName = origAuthor[0]?.name ?? 'Устгасан хэрэглэгч';
+      }
       replyText = origRows[0].content;
     }
     const inserted = await db
@@ -593,6 +627,7 @@ router.post(
       message: {
         id: row.id,
         room,
+        kind: 'user' as MessageKind,
         author: publicUser({ ...u, createdAt: u.createdAt }),
         content: row.content,
         replyTo: replyQuote(replyAuthorName, replyText),
@@ -615,6 +650,10 @@ router.patch(
     const content = validateContent(req.body, 2000, 'Мессеж 1–2000 тэмдэгт байх ёстой');
     const rows = await db.select().from(messages).where(eq(messages.id, id)).limit(1);
     if (!rows[0]) throw new HttpError(404, 'Мессеж олдсонгүй');
+    // Угтах мессеж (системийн) — зохиогч байхгүй тул хэний ч засаж болохгүй.
+    if (rows[0].kind === 'welcome' || rows[0].authorId === null) {
+      throw new HttpError(403, 'Системийн угтах мессежийг засах боломжгүй');
+    }
     requireAuthor(u, rows[0].authorId);
     const updated = await db
       .update(messages)
@@ -623,12 +662,16 @@ router.patch(
       .returning();
     const row = updated[0];
     const reactionRows = await loadAllReactions();
-    const authorRows = await db.select().from(users).where(eq(users.id, row.authorId)).limit(1);
-    const author = authorRows[0] ? publicUser(authorRows[0]) : deletedUser(row.authorId, row.createdAt);
+    const authorRows =
+      row.authorId === null
+        ? []
+        : await db.select().from(users).where(eq(users.id, row.authorId)).limit(1);
+    const author = authorRows[0] ? publicUser(authorRows[0]) : deletedUser(row.authorId ?? 0, row.createdAt);
     res.json({
       message: {
         id: row.id,
         room: row.room as Room,
+        kind: row.kind as MessageKind,
         author,
         content: row.content,
         replyTo: replyQuote(row.replyAuthorName, row.replyText),
@@ -648,7 +691,12 @@ router.delete(
     const id = parseId(req, 'Мессеж олдсонгүй');
     const rows = await db.select().from(messages).where(eq(messages.id, id)).limit(1);
     if (!rows[0]) throw new HttpError(404, 'Мессеж олдсонгүй');
-    if (!canDelete(u, rows[0].authorId)) {
+    // Угтах мессежийг зөвхөн админ (том/жижиг) устгаж болно — зохиогч байхгүй.
+    if (rows[0].kind === 'welcome') {
+      if (u.role !== 'admin' && u.role !== 'moderator') {
+        throw new HttpError(403, 'Угтах мессежийг зөвхөн админ устгаж болно');
+      }
+    } else if (!canDelete(u, rows[0].authorId ?? 0)) {
       throw new HttpError(403, 'Энэ мессежийг зөвхөн зохиогч, том админ эсвэл жижиг админ устгаж болно');
     }
     await db.delete(messages).where(eq(messages.id, id));
