@@ -19,9 +19,11 @@ export default function Rooms({ user, onViewProfile }: { user: User; onViewProfi
   const listRef = useRef<HTMLDivElement | null>(null);
   const firstLoadRef = useRef(true);
   // Өөрөө мессеж илгээхэд заавал доош гүйлгэнэ — дээш уншиж байсан ч
-  // өөрийн шинэ мессеж рүүгээ шууд очно. Ирж буй мессеж (poll) үүнийг
-  // тогтоохгүй, зөвхөн доод талд нь байвал дагана (доорх effect-ийг хар).
+  // өөрийн шинэ мессеж рүүгээ шууд очно.
   const forceScrollRef = useRef(false);
+  // Сүүлд харсан мессежийн тоо — шинэ мессеж ирснийг танихдаа хэрэглэнэ.
+  // (10 секунд тутамд шинэчлэгдэхэд мессеж ирээгүй бол гүйлгэхгүй.)
+  const lastCountRef = useRef(0);
 
   const load = useCallback(async () => {
     setError('');
@@ -45,17 +47,18 @@ export default function Rooms({ user, onViewProfile }: { user: User; onViewProfi
     return () => window.clearInterval(t);
   }, [load]);
 
-  // Шинэ мессеж ирэхэд: анх ачааллах, эсвэл өөрөө илгээсэн бол заавал
-  // доош гүйлгэнэ; бусдын мессеж ирэхэд зөвхөн доод талд нь байвал дагана —
-  // хэрэглэгч дээш гүйлгэж хуучин мессеж уншиж байхад нь тасалдуулахгүй.
+  // Шинэ мессеж ирэхэд заавал доош гүйлгэнэ — хэн бичсэнээс үл хамааран
+  // сүүлийн чатыг гараар скролдож харах шаардлагагүй. Мессеж ирээгүй
+  // шинэчлэлт (10 секунд тутамд) бол гүйлгэхгүй.
   useEffect(() => {
-    const el = listRef.current;
-    if (!el) return;
+    const grew = messages.length > lastCountRef.current;
     const force = forceScrollRef.current;
     forceScrollRef.current = false;
-    const nearBottom = firstLoadRef.current || force || el.scrollHeight - el.scrollTop - el.clientHeight < 150;
-    firstLoadRef.current = false;
-    if (nearBottom) bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    lastCountRef.current = messages.length;
+    if (firstLoadRef.current || grew || force) {
+      firstLoadRef.current = false;
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [messages]);
 
   const canDelete = (m: ChatMessage): boolean =>
