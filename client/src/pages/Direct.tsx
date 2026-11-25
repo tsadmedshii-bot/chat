@@ -102,7 +102,9 @@ export default function Direct({
   const selected = conversations.find((c) => c.user.id === selectedId) ?? null;
 
   const canDelete = (m: DirectMessage): boolean =>
-    m.senderId === user.id || user.role === 'admin' || user.role === 'moderator';
+    m.senderId === user.id ||
+    user.role === 'admin' ||
+    (user.role === 'moderator' && user.agreementActive);
 
   function selectPartner(partnerId: number): void {
     if (partnerId === selectedId) return;
