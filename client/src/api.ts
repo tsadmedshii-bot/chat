@@ -283,6 +283,25 @@ export async function setTextColor(userId: number, color: string | null): Promis
   return unwrapOne(data);
 }
 
+/** Ёс зүйн гэрээ — жижиг админ өөрөө зөвшөөрнө (хоёр дахь check ороход
+    бүх эрх автоматаар идэвхжинэ). */
+export async function agreeMiniAgreement(): Promise<User> {
+  const data = await api<User | { user: User }>('/api/agreement/mini', { method: 'POST' });
+  return unwrapOne(data);
+}
+
+/** Ёс зүйн гэрээ — том админ тухайн жижиг админы гэрээг зөвшөөрнө. */
+export async function agreeAdminAgreement(userId: number): Promise<User> {
+  const data = await api<User | { user: User }>(`/api/agreement/admin/${userId}`, { method: 'POST' });
+  return unwrapOne(data);
+}
+
+/** Гэрээнд харуулах том админы нэр, нэвтрэх нэр. */
+export async function getAgreementAdmin(): Promise<User> {
+  const data = await api<User | { admin: User }>('/api/agreement/admin');
+  return 'admin' in data ? data.admin : data;
+}
+
 /** Хэрэглэгчийн аккоунтийг устгах (пост, мессеж, чаттай нь хамт) — зөвхөн том админ. */
 export async function adminDeleteUser(userId: number): Promise<void> {
   await api<void>(`/api/admin/users/${userId}`, { method: 'DELETE' });
