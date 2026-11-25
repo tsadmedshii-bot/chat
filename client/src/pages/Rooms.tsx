@@ -63,9 +63,16 @@ export default function Rooms({ user, onViewProfile }: { user: User; onViewProfi
   }, [messages]);
 
   const canDelete = (m: ChatMessage): boolean => {
-    // Угтах мессеж — зөвхөн админ (том/жижиг) устгаж болно (зохиогч байхгүй).
-    if (m.kind === 'welcome') return user.role === 'admin' || user.role === 'moderator';
-    return m.author !== null && (m.author.id === user.id || user.role === 'admin' || user.role === 'moderator');
+    // Угтах мессеж — зөвхөн админ устгаж болно; жижиг админ нь гэрээ нь
+    // бүрэн баталгаажсан үед л устгана (зохиогч байхгүй).
+    if (m.kind === 'welcome')
+      return user.role === 'admin' || (user.role === 'moderator' && user.agreementActive);
+    return (
+      m.author !== null &&
+      (m.author.id === user.id ||
+        user.role === 'admin' ||
+        (user.role === 'moderator' && user.agreementActive))
+    );
   };
 
   // Хамгийн сүүлийн угтах мессеж — чатын толгой дээр 1 цаг пиндэгдэнэ.
