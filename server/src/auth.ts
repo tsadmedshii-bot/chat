@@ -7,6 +7,28 @@ import { db } from './db';
 import { sessions, users } from './schema';
 import type { Role } from '../../shared/src/types';
 
+/** Ёс зүйн гэрээ бүрэн баталгаажсан эсэх — жижиг админ + том админ
+    хоёул зөвшөөрсөн үед true. Хоёр дахь check орох мөчид жижиг админы
+    бүх эрх (бандах + өнгө/фонт + бусдын бичлэг устгах) автоматаар идэвхжинэ. */
+export function isAgreementComplete(miniAt: Date | null, adminAt: Date | null): boolean {
+  return miniAt !== null && adminAt !== null;
+}
+
+/** Жижиг админы БАНДАХ эрх үр дүнтэй эсэх — хадгалагдсан эрх + гэрээ бүрэн. */
+export function effectiveCanBan(user: AuthUser): boolean {
+  return user.canBan && isAgreementComplete(user.agreementMiniAt, user.agreementAdminAt);
+}
+
+/** Жижиг админы ӨНГӨ/ФОНТ сонгох эрх үр дүнтэй эсэх — хадгалагдсан эрх + гэрээ бүрэн. */
+export function effectiveCanStyle(user: AuthUser): boolean {
+  return user.canStyle && isAgreementComplete(user.agreementMiniAt, user.agreementAdminAt);
+}
+
+/** Жижиг админ бусдын бичлэгийг устгах эрхтэй эсэх — moderator + гэрээ бүрэн. */
+export function canModerateOthers(user: AuthUser): boolean {
+  return user.role === 'moderator' && isAgreementComplete(user.agreementMiniAt, user.agreementAdminAt);
+}
+
 /** Хэрэглэгч бантай эсэх — байнга бан (banned) ЭСВЭЛ хугацаа нь дуусаагүй
     хугацаатай бан (bannedUntil ирээдүйд) байгаа үед true. Хугацаа нь
     өнгөрсөн бан нь бан гэж тооцогдохгүй (цэвэрлэгээний ажил баганыг арилгана). */
@@ -43,6 +65,10 @@ export interface AuthUser {
   canBan: boolean;
   /** Өнгө/фонт сонгох эрх олгосон эсэх (зөвхөн moderator-д хамаарна). */
   canStyle: boolean;
+  /** Ёс зүйн гэрээ — жижиг админ өөрөө зөвшөөрсөн цаг — байхгүй бол null. */
+  agreementMiniAt: Date | null;
+  /** Ёс зүйн гэрээ — том админ тухайн жижиг админы гэрээг зөвшөөрсөн цаг. */
+  agreementAdminAt: Date | null;
   avatar: string | null;
   /** Бичлэгийн өнгө ('#RRGGBB') — байхгүй бол null. */
   textColor: string | null;
@@ -95,6 +121,8 @@ async function loadUserByToken(token: string): Promise<AuthUser | null> {
       bannedUntil: users.bannedUntil,
       canBan: users.canBan,
       canStyle: users.canStyle,
+      agreementMiniAt: users.agreementMiniAt,
+      agreementAdminAt: users.agreementAdminAt,
       avatar: users.avatar,
       textColor: users.textColor,
       textFont: users.textFont,
@@ -201,7 +229,7 @@ export async function registerUser(
   const inserted = await db
     .insert(users)
     .values({ name: cleanName, username: cleanUsername, passwordHash, role, lastSeenAt: now })
-    .returning({ id: users.id, name: users.name, username: users.username, role: users.role, banned: users.banned, bannedUntil: users.bannedUntil, canBan: users.canBan, canStyle: users.canStyle, avatar: users.avatar, textColor: users.textColor, textFont: users.textFont, lastSeenAt: users.lastSeenAt, createdAt: users.createdAt });
+    .returning({ id: users.id, name: users.name, username: users.username, role: users.role, banned: users.banned, bannedUntil: users.bannedUntil, canBan: users.canBan, canStyle: users.canStyle, agreementMiniAt: users.agreementMiniAt, agreementAdminAt: users.agreementAdminAt, avatar: users.avatar, textColor: users.textColor, textFont: users.textFont, lastSeenAt: users.lastSeenAt, createdAt: users.createdAt });
   const row = inserted[0];
   return { ...row, role: row.role as Role };
 }
