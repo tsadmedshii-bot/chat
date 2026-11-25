@@ -1252,6 +1252,117 @@ img.avatar {
   word-break: break-word;
 }
 
+/* Жижиг админы ёс зүйн гэрээ — Нүүр хуудасны сануулга, Профайл хэсэг,
+   гэрээний цонх. Гэрээ бүрэн баталгаажаагүй жижиг админд л харагдана. */
+.agreement-card {
+  background: linear-gradient(135deg, rgba(124, 92, 255, 0.22), rgba(212, 175, 55, 0.22));
+  border: 1px solid #7c5cff;
+  border-radius: 16px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  box-shadow: 0 4px 16px rgba(124, 92, 255, 0.25);
+}
+
+.agreement-card h3 {
+  margin: 0 0 6px;
+}
+
+.agreement-card p {
+  margin: 6px 0;
+}
+
+.agreement-section {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-top: 16px;
+  text-align: left;
+}
+
+.agreement-section h3 {
+  margin: 0 0 6px;
+}
+
+.agreement-section p {
+  margin: 6px 0;
+}
+
+.agreement-modal {
+  position: relative;
+  width: 100%;
+  max-width: 560px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 28px 20px 20px;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.agreement-modal h2 {
+  margin: 4px 0 0;
+  text-align: center;
+  font-size: 1.15rem;
+}
+
+.agreement-parties,
+.agreement-preamble {
+  margin: 0;
+}
+
+.agreement-clauses {
+  margin: 0;
+  padding-left: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.agreement-clauses ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.agreement-sign {
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+.agreement-sign p {
+  margin: 4px 0;
+}
+
+.agreement-done {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.agreement-check {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  cursor: pointer;
+  background: rgba(124, 92, 255, 0.12);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.agreement-check input {
+  margin-top: 3px;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+}
+
 /* Жижиг админы сонгож болох 7 гоёмсог фонт — бүгд Кирилл + Латин дэмждэг.
    Playfair Display энд байхгүй — тэр нь зөвхөн том админых. */
 .font-lobster {
