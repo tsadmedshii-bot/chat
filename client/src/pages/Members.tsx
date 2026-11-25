@@ -16,6 +16,7 @@ import {
   me,
   setTextColor,
 } from '../api';
+import AgreementModal from '../components/AgreementModal';
 import UserName, { Avatar } from '../components/UserBadge';
 
 /** Хэрэглэгч одоо бантай эсэх — байнга бан ЭСВЭЛ хугацаа нь дуусаагүй бан. */
@@ -110,6 +111,8 @@ export default function Members({
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  // Ёс зүйн гэрээний цонх — аль жижиг админы гэрээг харж байгаа.
+  const [agreementTarget, setAgreementTarget] = useState<User | null>(null);
   // Хуудас нээгдэх бүрд өөрийн эрхийг серверээс дахин авна: нэвтэрсэн
   // хэвээр байхдаа эрх авсан (жишээ нь жижиг админ + бандах эрх) бол
   // хуучирсан prop-оос болоод товч нь харагдахгүй байх алдааг засна.
@@ -117,12 +120,13 @@ export default function Members({
   const viewer = freshUser ?? user;
   const isAdmin = viewer.role === 'admin';
   // Гишүүд хэсгийг том админ + бандах эрхтэй жижиг админ харна.
-  const canView = isAdmin || (viewer.role === 'moderator' && viewer.canBan);
+  // Жижиг админд бандах эрх нь ёс зүйн гэрээ бүрэн баталгаажсан үед л үр дүнтэй.
+  const canView = isAdmin || (viewer.role === 'moderator' && viewer.canBan && viewer.agreementActive);
   // Энэ хэрэглэгчийг бандаж болох эсэх (UI түвшинд; сервер дахин шалгана).
   const canBanRow = (row: MemberRow): boolean => {
     if (row.user.id === viewer.id) return false;
     if (isAdmin) return row.user.role !== 'admin';
-    return viewer.role === 'moderator' && viewer.canBan && row.user.role === 'member';
+    return viewer.role === 'moderator' && viewer.canBan && viewer.agreementActive && row.user.role === 'member';
   };
 
   useEffect(() => {
@@ -132,7 +136,14 @@ export default function Members({
         if (cancelled) return;
         setFreshUser(fresh);
         // Эрх нь өөрчлөгдсөн бол дээд түвшний төлөвийг ч шинэчилнэ.
-        if (onUserChange && (fresh.role !== user.role || fresh.canBan !== user.canBan || fresh.canStyle !== user.canStyle)) {
+        if (
+          onUserChange &&
+          (fresh.role !== user.role ||
+            fresh.canBan !== user.canBan ||
+            fresh.canStyle !== user.canStyle ||
+            fresh.agreementMiniAt !== user.agreementMiniAt ||
+            fresh.agreementAdminAt !== user.agreementAdminAt)
+        ) {
           onUserChange(fresh);
         }
       })
@@ -301,7 +312,7 @@ export default function Members({
       <h2>{isAdmin ? '👑 Том админ — Гишүүд' : '⚔️🛡️ Жижиг админ — Гишүүд'}</h2>
       <p className="muted">
         {isAdmin
-          ? 'Зөвхөн та том админ. Жижиг админ (⚔️🛡️) нь бусдын пост, мессежийг устгаж чадна; бандах эрх болон өнгө/фонт сонгох эрхийг та тусад нь олгоно.'
+          ? 'Зөвхөн та том админ. Жижиг админ (⚔️🛡️) нь ёс зүйн гэрээг та болон тэр хоёр зөвшөөрсний дараа л бусдын пост, мессежийг устгаж, бандах, өнгө/фонт сонгох эрхтэй болно. Гэрээ бүрэн болсон ч бандах болон өнгө/фонт эрхийг та дангаар нь хурааж болно.'
           : 'Танд бандах эрх олгосон тул гишүүдийг харж, энгийн хэрэглэгчийг бандаж болно.'}
       </p>
       {error && <p className="error">{error}</p>}
@@ -387,6 +398,11 @@ export default function Members({
                 Бандах эрх: {row.user.canBan ? 'Олгосон ✅' : 'Олгоогүй'}
                 <br />
                 🎨 Өнгө/фонт: {row.user.canStyle ? 'Олгосон ✅' : 'Олгоогүй'}
+                <br />
+                📜 Гэрээ:{' '}
+                {row.user.agreementActive
+                  ? `✅ Бүх эрх идэвхтэй — ${row.user.agreementMiniAt && row.user.agreementAdminAt ? formatDateTime(row.user.agreementMiniAt > row.user.agreementAdminAt ? row.user.agreementMiniAt : row.user.agreementAdminAt) : ''}`
+                  : `жижиг админ ${row.user.agreementMiniAt ? '✅' : '⏳'} · том админ ${row.user.agreementAdminAt ? '✅' : '⏳'} — эрх хүлээгдэж байна`}
               </div>
             )}
             {isAdmin && (
@@ -406,6 +422,9 @@ export default function Members({
             )}
             {isAdmin && row.user.role === 'moderator' && (
               <>
+                <button type="button" className="btn-ghost small" onClick={() => setAgreementTarget(row.user)}>
+                  📜 Гэрээ харах
+                </button>
                 {row.user.canBan ? (
                   <button type="button" className="btn-ghost small" onClick={() => void revokeBanPermission(row.user.id)}>
                     Бандах эрхийг хураах
@@ -495,6 +514,19 @@ export default function Members({
           </div>
         </div>
       ))}
+      {agreementTarget && (
+        <AgreementModal
+          mini={agreementTarget}
+          viewer={viewer}
+          onAgreed={(updated) => {
+            setAgreementTarget(null);
+            setNotice('Ёс зүйн гэрээг зөвшөөрлөө. Хоёр тал хоёул зөвшөөрсөн бол жижиг админы бүх эрх автоматаар идэвхжив. ✅');
+            void refresh();
+            if (updated.id === viewer.id && onUserChange) onUserChange(updated);
+          }}
+          onClose={() => setAgreementTarget(null)}
+        />
+      )}
     </div>
   );
 }
