@@ -5,7 +5,7 @@ import { and, asc, desc, eq, isNull, or } from 'drizzle-orm';
 import { db } from './db';
 import { directMessages, dmReads, messages, postComments, postLikes, posts, reactions, roomAccess, sessions, users, banLogs } from './schema';
 import type { AuthUser } from './auth';
-import { createSession, deleteSession, HttpError, banMessage, isBannedNow, registerUser, requireAdmin, requireAuth, verifyPassword } from './auth';
+import { createSession, deleteSession, HttpError, banMessage, isBannedNow, registerUser, requireAdmin, requireAuth, verifyPassword, isAgreementComplete, effectiveCanBan, effectiveCanStyle } from './auth';
 import type { BanLog, ChatMessage, DirectConversation, DirectMessage, MemberRow, MessageKind, Post, PostComment, ReactionCount, ReactionTargetType, ReplyQuote, Role, Room, User } from '../../shared/src/types';
 import { REACTION_EMOJIS, SYSTEM_NAME, TEXT_FONT_KEYS } from '../../shared/src/types';
 
@@ -23,13 +23,13 @@ function isOnline(lastSeenAt: Date | null): boolean {
   return Date.now() - lastSeenAt.getTime() <= ONLINE_WINDOW_MS;
 }
 
-function publicUser(row: { id: number; name: string; username: string; role: string; banned: boolean; bannedUntil: Date | null; canBan: boolean; canStyle: boolean; avatar: string | null; textColor: string | null; textFont: string | null; lastSeenAt: Date | null; createdAt: Date }): User {
-  return { id: row.id, name: row.name, username: row.username, role: row.role as Role, banned: row.banned, bannedUntil: row.bannedUntil ? toIso(row.bannedUntil) : null, canBan: row.canBan, canStyle: row.canStyle, avatar: row.avatar ?? null, textColor: row.textColor ?? null, textFont: row.canStyle ? (row.textFont ?? null) : null, lastSeenAt: row.lastSeenAt ? toIso(row.lastSeenAt) : null, online: isOnline(row.lastSeenAt), createdAt: toIso(row.createdAt) };
+function publicUser(row: { id: number; name: string; username: string; role: string; banned: boolean; bannedUntil: Date | null; canBan: boolean; canStyle: boolean; agreementMiniAt: Date | null; agreementAdminAt: Date | null; avatar: string | null; textColor: string | null; textFont: string | null; lastSeenAt: Date | null; createdAt: Date }): User {
+  return { id: row.id, name: row.name, username: row.username, role: row.role as Role, banned: row.banned, bannedUntil: row.bannedUntil ? toIso(row.bannedUntil) : null, canBan: row.canBan, canStyle: row.canStyle, agreementMiniAt: row.agreementMiniAt ? toIso(row.agreementMiniAt) : null, agreementAdminAt: row.agreementAdminAt ? toIso(row.agreementAdminAt) : null, agreementActive: isAgreementComplete(row.agreementMiniAt, row.agreementAdminAt), avatar: row.avatar ?? null, textColor: row.textColor ?? null, textFont: row.canStyle && isAgreementComplete(row.agreementMiniAt, row.agreementAdminAt) ? (row.textFont ?? null) : null, lastSeenAt: row.lastSeenAt ? toIso(row.lastSeenAt) : null, online: isOnline(row.lastSeenAt), createdAt: toIso(row.createdAt) };
 }
 
 /** Устгагдсан хэрэглэгчийн оронд харуулдаг орлуулагч. */
 function deletedUser(authorId: number, createdAt: Date): User {
-  return { id: authorId, name: 'Устгасан хэрэглэгч', username: '', role: 'member' as Role, banned: false, bannedUntil: null, canBan: false, canStyle: false, avatar: null, textColor: null, textFont: null, lastSeenAt: null, online: false, createdAt: toIso(createdAt) };
+  return { id: authorId, name: 'Устгасан хэрэглэгч', username: '', role: 'member' as Role, banned: false, bannedUntil: null, canBan: false, canStyle: false, agreementMiniAt: null, agreementAdminAt: null, agreementActive: false, avatar: null, textColor: null, textFont: null, lastSeenAt: null, online: false, createdAt: toIso(createdAt) };
 }
 
 function toDirectMessage(row: { id: number; senderId: number; recipientId: number; content: string; replyAuthorName: string | null; replyText: string | null; editedAt: Date | null; createdAt: Date }, reactionRows: { targetType: string; targetId: number; emoji: string; userId: number }[], meId: number): DirectMessage {
@@ -101,9 +101,13 @@ async function requireReactionTarget(type: ReactionTargetType, id: number): Prom
   if (!rows[0]) throw new HttpError(404, 'Бичлэг олдсонгүй');
 }
 
-/** Өөрийнх нь, эсвэл админ/жижиг админ бол бусдынхыг устгаж болно. */
+/** Өөрийнх нь, эсвэл админ/жижиг админ бол бусдынхыг устгаж болно.
+    Жижиг админ бусдынхыг устгахдаа ёс зүйн гэрээ нь бүрэн баталгаажсан
+    байх ёстой (гэрээгүй бол зөвхөн өөрийнхөө бичлэгийг устгана). */
 function canDelete(user: AuthUser, authorId: number): boolean {
-  return user.id === authorId || user.role === 'admin' || user.role === 'moderator';
+  if (user.id === authorId) return true;
+  if (user.role === 'admin') return true;
+  return user.role === 'moderator' && isAgreementComplete(user.agreementMiniAt, user.agreementAdminAt);
 }
 
 type AsyncHandler = (req: Request, res: Response, next: NextFunction) => Promise<void> | void;
@@ -691,9 +695,10 @@ router.delete(
     const id = parseId(req, 'Мессеж олдсонгүй');
     const rows = await db.select().from(messages).where(eq(messages.id, id)).limit(1);
     if (!rows[0]) throw new HttpError(404, 'Мессеж олдсонгүй');
-    // Угтах мессежийг зөвхөн админ (том/жижиг) устгаж болно — зохиогч байхгүй.
+    // Угтах мессежийг зөвхөн админ устгаж болно — жижиг админ нь гэрээ нь
+    // бүрэн баталгаажсан үед л устгана (зохиогч байхгүй).
     if (rows[0].kind === 'welcome') {
-      if (u.role !== 'admin' && u.role !== 'moderator') {
+      if (u.role !== 'admin' && !(u.role === 'moderator' && isAgreementComplete(u.agreementMiniAt, u.agreementAdminAt))) {
         throw new HttpError(403, 'Угтах мессежийг зөвхөн админ устгаж болно');
       }
     } else if (!canDelete(u, rows[0].authorId ?? 0)) {
@@ -942,10 +947,12 @@ async function setModerator(id: number, role: 'moderator' | 'member'): Promise<U
     throw new HttpError(400, 'Том админы эрхийг өөрчлөх боломжгүй');
   }
   // Жижиг админ эрхийг хураахад бандах эрх болон өнгө/фонт сонгох эрх нь
-  // ч хамт арилна.
+  // ч хамт арилна. Ёс зүйн гэрээ ч арилна — дахин жижиг админ болбол
+  // гэрээнд дахин гарын үсэг зурах ёстой (гэрээ нь нэг удаагийн эрх
+  // олголт бүрд хамаарна).
   const updated = await db
     .update(users)
-    .set({ role, canBan: role === 'member' ? false : rows[0].canBan, canStyle: role === 'member' ? false : rows[0].canStyle })
+    .set({ role, canBan: role === 'member' ? false : rows[0].canBan, canStyle: role === 'member' ? false : rows[0].canStyle, agreementMiniAt: role === 'member' ? null : rows[0].agreementMiniAt, agreementAdminAt: role === 'member' ? null : rows[0].agreementAdminAt })
     .where(eq(users.id, id))
     .returning();
   return publicUser(updated[0]);
@@ -964,20 +971,22 @@ router.post('/admin/users/:id/revoke-moderator', requireAuth, requireAdmin, ah(a
 // ---------------------------------------------------------------- бан
 // Бандах дүрэм:
 // - Том админ: өөрийгөөсөө бусад хэнийг ч (жижиг админ, гишүүн) бандаж/тайлж чадна.
-// - Жижиг админ: бандах эрх (can_ban) авсан үедээ л, зөвхөн энгийн хэрэглэгчийг
-//   бандаж чадна — том админ болон өөр жижиг админыг бандаж болохгүй.
+// - Жижиг админ: бандах эрх (can_ban) авсан + ёс зүйн гэрээ нь бүрэн
+//   баталгаажсан үедээ л, зөвхөн энгийн хэрэглэгчийг бандаж чадна —
+//   том админ болон өөр жижиг админыг бандаж болохгүй.
 // - Анхдагчаар жижиг админ бандаж болохгүй.
 // Бангийн хугацаа: 5, 15, 30 минут, 24 цаг (1440 минут), эсвэл Байнга (null).
 // Байнга бан нь users.banned (boolean) баганаар, хугацаатай бан нь
 // users.banned_until баганаар тэмдэглэгдэнэ. Бангийн түүх ban_logs-д хадгалагдана.
 
-/** Гишүүдийн жагсаалтыг том админ + бандах эрхтэй жижиг админ харж болно. */
+/** Гишүүдийн жагсаалтыг том админ + бандах эрхтэй жижиг админ харж болно.
+    Жижиг админд бандах эрх нь гэрээ бүрэн баталгаажсан үед л үр дүнтэй. */
 function requireAdminOrBanModerator(req: Request, res: Response, next: NextFunction): void {
   if (!req.user) {
     res.status(401).json({ error: 'Нэвтрэх шаардлагатай байна' });
     return;
   }
-  if (req.user.role === 'admin' || (req.user.role === 'moderator' && req.user.canBan)) {
+  if (req.user.role === 'admin' || (req.user.role === 'moderator' && effectiveCanBan(req.user))) {
     next();
     return;
   }
@@ -994,7 +1003,7 @@ function canBanTarget(actor: AuthUser, target: { id: number; role: string }): vo
     }
     return;
   }
-  if (actor.role !== 'moderator' || !actor.canBan) {
+  if (actor.role !== 'moderator' || !effectiveCanBan(actor)) {
     throw new HttpError(403, 'Бандаж болох эрх танд байхгүй байна');
   }
   if (target.role !== 'member') {
@@ -1174,6 +1183,70 @@ router.post('/admin/users/:id/revoke-style-permission', requireAuth, requireAdmi
   res.json({ user });
 }));
 
+// ---------------------------------------------------------------- жижиг админы ёс зүйн гэрээ
+// Гэрээг нэг удаа хийнэ: жижиг админ өөрөө check хийж зөвшөөрч, том админ
+// check хийж зөвшөөрсний дараа (хоёр дахь check орох мөчид) жижиг админы
+// БҮХ эрх (бандах + өнгө/фонт + бусдын бичлэг устгах) автоматаар идэвхжинэ.
+// Тусдаа олгосон бандах/өнгө-фонт эрх нь гэрээ бүрэн болоогүй үед үр дүнгүй.
+// Эрх хураах товчнууд хэвээрээ — гэрээ бүрэн болсон ч том админ тухайн
+// эрхийг дангаар нь хурааж болно (гэрээний 5-р зүйл).
+
+/** Гэрээний нэг талын check-ийг бүртгэнэ. Аль хэдийн зөвшөөрсөн бол
+    юу ч өөрчлөхгүй (idempotent). Хоёр дахь check орох мөчид л
+    canBan + canStyle хоёрыг автоматаар true болгоно — дараа нь эрх
+    хураагдсан бол дахин зөвшөөрөхөд сэргэхгүй (хураалт хэвээрээ). */
+async function recordAgreementCheck(id: number, side: 'mini' | 'admin'): Promise<User> {
+  const updated = await db.transaction(async (tx) => {
+    const rows = await tx.select().from(users).where(eq(users.id, id)).limit(1);
+    const row = rows[0];
+    if (!row) throw new HttpError(404, 'Хэрэглэгч олдсонгүй');
+    if (row.role !== 'moderator') {
+      throw new HttpError(400, 'Ёс зүйн гэрээ зөвхөн жижиг админд хамаарна');
+    }
+    const myAt = side === 'mini' ? row.agreementMiniAt : row.agreementAdminAt;
+    const otherAt = side === 'mini' ? row.agreementAdminAt : row.agreementMiniAt;
+    // Аль хэдийн зөвшөөрсөн — өөрчлөлтгүй буцаана.
+    if (myAt !== null) return row;
+    const now = new Date();
+    const set = side === 'mini' ? { agreementMiniAt: now } : { agreementAdminAt: now };
+    const after = await tx.update(users).set(set).where(eq(users.id, id)).returning();
+    // Хоёр дахь check — гэрээ бүрэн боллоо, бүх эрх автоматаар идэвхжинэ.
+    if (otherAt !== null) {
+      const activated = await tx
+        .update(users)
+        .set({ canBan: true, canStyle: true })
+        .where(eq(users.id, id))
+        .returning();
+      return activated[0];
+    }
+    return after[0];
+  });
+  return publicUser(updated);
+}
+
+/** Жижиг админ өөрөө гэрээг зөвшөөрнө — зөвхөн өөрийнхөө төлөө. */
+router.post('/agreement/mini', requireAuth, ah(async (req, res) => {
+  const u = req.user as AuthUser;
+  if (u.role !== 'moderator') {
+    throw new HttpError(403, 'Ёс зүйн гэрээнд зөвхөн жижиг админ гарын үсэг зурна');
+  }
+  const user = await recordAgreementCheck(u.id, 'mini');
+  res.json({ user });
+}));
+
+/** Том админ тухайн жижиг админы гэрээг зөвшөөрнө. */
+router.post('/agreement/admin/:userId', requireAuth, requireAdmin, ah(async (req, res) => {
+  const user = await recordAgreementCheck(parseId(req, 'Хэрэглэгч олдсонгүй', 'userId'), 'admin');
+  res.json({ user });
+}));
+
+/** Гэрээнд харуулах том админы нэр, нэвтрэх нэр — гэрээний толгой хэсэгт хэрэглэнэ. */
+router.get('/agreement/admin', requireAuth, ah(async (_req, res) => {
+  const rows = await db.select().from(users).where(eq(users.role, 'admin')).limit(1);
+  if (!rows[0]) throw new HttpError(404, 'Том админ олдсонгүй');
+  res.json({ admin: publicUser(rows[0]) });
+}));
+
 // ---------------------------------------------------------------- бичлэгийн өнгө
 // Зөвхөн том админ хэрэглэгчид бичлэгийн өнгө онооно. Өнгө нь '#RRGGBB'
 // хэлбэртэй байх ёстой; null илгээхэд өнгө арилна.
@@ -1193,8 +1266,9 @@ router.post('/admin/users/:id/text-color', requireAuth, requireAdmin, ah(async (
 }));
 
 // ---------------------------------------------------------------- өөрийн өнгө, фонт (canStyle эрхтэй жижиг админ)
-// Зөвхөн moderator + canStyle=true үед өөрийн өнгө, фонтыг өөрөө сонгоно.
-// Том админ (Playfair фонт нь өөр замаар), энгийн гишүүн → 403.
+// Зөвхөн moderator + canStyle=true + ёс зүйн гэрээ бүрэн үед өөрийн
+// өнгө, фонтыг өөрөө сонгоно. Том админ (Playfair фонт нь өөр замаар),
+// энгийн гишүүн → 403. Гэрээ бүрэн болоогүй бол 403 (тусдаа мессеж).
 // Биедээ байхгүй талбарыг дамжуулбал хуучин утга нь хэвээрээ байна;
 // null илгээхэд тухайн сонголт арилна. Эрх хураагдсан үед фонт нь
 // харагдахгүй болно (утга нь DB-д хадгалагдсан хэвээрээ — дахин олгоход сэргэнэ).
@@ -1206,6 +1280,9 @@ router.post('/me/style', requireAuth, ah(async (req, res) => {
   const row = rows[0];
   if (row.role !== 'moderator' || !row.canStyle) {
     throw new HttpError(403, 'Өнгө, фонт сонгох эрх танд олгогдоогүй байна. Том админаас эрх авна уу');
+  }
+  if (!effectiveCanStyle(u)) {
+    throw new HttpError(403, 'Ёс зүйн гэрээ бүрэн баталгаажаагүй байна. Эхлээд гэрээг зөвшөөрнө үү');
   }
   const body = (req.body ?? {}) as { color?: unknown; font?: unknown };
   let nextColor = row.textColor;
