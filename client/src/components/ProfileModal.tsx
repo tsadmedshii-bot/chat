@@ -84,7 +84,13 @@ export default function ProfileModal({
       .then((u) => {
         if (!alive) return;
         setFreshViewer(u);
-        if ((u.role !== viewer.role || u.canBan !== viewer.canBan) && onUserChange) {
+        if (
+          (u.role !== viewer.role ||
+            u.canBan !== viewer.canBan ||
+            u.agreementMiniAt !== viewer.agreementMiniAt ||
+            u.agreementAdminAt !== viewer.agreementAdminAt) &&
+          onUserChange
+        ) {
           onUserChange(u);
         }
       })
@@ -114,10 +120,11 @@ export default function ProfileModal({
   // Серверийн canBanTarget-тай яг ижил дүрэм: өөрийгөө болохгүй; том админ
   // админаас бусдыг бандаж болно; жижиг админ зөвхөн энгийн хэрэглэгчийг
   // бандаж чадна — том админ болон өөр жижиг админыг бандаж болохгүй.
+  // Жижиг админд бандах эрх нь гэрээ бүрэн баталгаажсан үед л үр дүнтэй.
   const canBan = user !== null && ((): boolean => {
     if (user.id === viewerNow.id) return false;
     if (viewerNow.role === 'admin') return user.role !== 'admin';
-    return viewerNow.role === 'moderator' && viewerNow.canBan && user.role === 'member';
+    return viewerNow.role === 'moderator' && viewerNow.canBan && viewerNow.agreementActive && user.role === 'member';
   })();
 
   async function ban(durationMinutes: number | null): Promise<void> {
