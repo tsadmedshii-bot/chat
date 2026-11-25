@@ -2,12 +2,23 @@ import { useEffect, useRef, useState } from 'react';
 import type { User } from '../../../shared/src/types';
 import { STYLE_FONTS } from '../../../shared/src/types';
 import { ApiError, deleteMyAccount, getUserProfile, logout, me, removeAvatar, setMyStyle, uploadAvatar } from '../api';
+import AgreementModal from '../components/AgreementModal';
 import InstallApp from '../components/InstallApp';
 import { Avatar, RoleBadge } from '../components/UserBadge';
 import Lightbox from '../components/Lightbox';
 
 /** Бичлэгийн өнгөний бэлэн сонголтууд («Гишүүд» хуудасныхтай ижил). */
 const PRESET_COLORS = ['#D4AF37', '#E5484D', '#3E63DD', '#30A46C', '#8E4EC6', '#D6409F', '#F76B15', '#12A594'];
+
+function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleString('mn-MN', {
+    timeZone: 'Asia/Ulaanbaatar',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
 
 /**
  * Зургийг 512x512 JPEG (чанар 0.8) болгон жижигрүүлж data URL буцаана.
@@ -60,6 +71,8 @@ export default function Profile({ user, onUserChange, onAccountDeleted }: { user
   const [myFont, setMyFont] = useState<string | null>(user.textFont);
   const [customColor, setCustomColor] = useState(user.textColor ?? '#D4AF37');
   const [savingStyle, setSavingStyle] = useState(false);
+  // Ёс зүйн гэрээний цонх.
+  const [showAgreement, setShowAgreement] = useState(false);
 
   // Хуудас нээгдэхэд өөрийн эрхийг серверээс дахин авна: нэвтэрсэн
   // хэвээр байхдаа эрх авсан бол хуучирсан төлөвөөс болоод сонгогч нь
@@ -69,7 +82,13 @@ export default function Profile({ user, onUserChange, onAccountDeleted }: { user
     void me()
       .then((fresh) => {
         if (!alive) return;
-        if (fresh.canStyle !== user.canStyle || fresh.textColor !== user.textColor || fresh.textFont !== user.textFont) {
+        if (
+          fresh.canStyle !== user.canStyle ||
+          fresh.textColor !== user.textColor ||
+          fresh.textFont !== user.textFont ||
+          fresh.agreementMiniAt !== user.agreementMiniAt ||
+          fresh.agreementAdminAt !== user.agreementAdminAt
+        ) {
           onUserChange(fresh);
           setMyColor(fresh.textColor);
           setMyFont(fresh.textFont);
@@ -230,7 +249,45 @@ export default function Profile({ user, onUserChange, onAccountDeleted }: { user
           {user.avatar ? ' Зургийг томруулж харахын тулд дарна уу.' : ''}
         </p>
 
-        {user.role === 'moderator' && user.canStyle && (
+        {user.role === 'moderator' && (
+          <div className="agreement-section">
+            <h3>📜 Ёс зүйн гэрээ</h3>
+            {user.agreementActive ? (
+              <p className="muted small">
+                ✅ Гэрээ бүрэн баталгаажсан — таны бүх эрх (бандах, өнгө/фонт, бусдын бичлэг устгах)
+                идэвхтэй байна.
+              </p>
+            ) : (
+              <p className="muted small">
+                Жижиг админы эрх идэвхжихээс өмнө та болон том админ ёс зүйн гэрээг зөвшөөрөх хэрэгтэй.
+                Хоёр тал хоёул зөвшөөрөхөд таны бүх эрх автоматаар идэвхжинэ.
+              </p>
+            )}
+            <p className="muted small">
+              Таны зөвшөөрөл:{' '}
+              {user.agreementMiniAt ? `✅ ${formatDateTime(user.agreementMiniAt)}` : '⏳ Хүлээгдэж байна'}
+              <br />
+              Том админы зөвшөөрөл:{' '}
+              {user.agreementAdminAt ? `✅ ${formatDateTime(user.agreementAdminAt)}` : '⏳ Хүлээгдэж байна'}
+            </p>
+            <button type="button" className="btn-ghost" onClick={() => setShowAgreement(true)}>
+              📜 Гэрээ харах
+            </button>
+          </div>
+        )}
+        {showAgreement && (
+          <AgreementModal
+            mini={user}
+            viewer={user}
+            onAgreed={(updated) => {
+              setShowAgreement(false);
+              onUserChange(updated);
+            }}
+            onClose={() => setShowAgreement(false)}
+          />
+        )}
+
+        {user.role === 'moderator' && user.canStyle && user.agreementActive && (
           <div className="style-section">
             <h3>🎨 Миний бичлэгийн өнгө, фонт</h3>
             <p className="muted small">
