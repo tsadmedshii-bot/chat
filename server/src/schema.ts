@@ -15,6 +15,12 @@ export const users = pgTable('users', {
   /** Жижиг админд өнгө/фонт сонгох эрх олгосон эсэх — зөвхөн том админ
       асааж/унтраана, зөвхөн жижиг админд (moderator) хамаарна. */
   canStyle: boolean('can_style').notNull().default(false),
+  /** Ёс зүйн гэрээ — жижиг админ өөрөө зөвшөөрсөн цаг (NULL = зөвшөөрөөгүй).
+      Хоёр цаг (энэ + agreement_admin_at) хоёул тогтсон үед гэрээ бүрэн
+      баталгаажиж, жижиг админы бүх эрх автоматаар идэвхжинэ. */
+  agreementMiniAt: timestamp('agreement_mini_at'),
+  /** Ёс зүйн гэрээ — том админ тухайн жижиг админы гэрээг зөвшөөрсөн цаг. */
+  agreementAdminAt: timestamp('agreement_admin_at'),
   /** Жижиг админы сонгосон фонтын түлхүүр (жишээ нь 'lobster') —
       NULL = энгийн фонт. Эрх хураагдсан үед ч утга нь хадгалагдана. */
   textFont: text('text_font'),
