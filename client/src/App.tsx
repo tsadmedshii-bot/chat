@@ -144,7 +144,7 @@ export default function App() {
         </div>
       </header>
       <main className={view === 'rooms' ? 'main-content chat-full-main' : 'container main-content'}>
-        {view === 'home' && <Home user={user} onViewProfile={setProfileUserId} />}
+        {view === 'home' && <Home user={user} onViewProfile={setProfileUserId} onUserChange={setUser} />}
         {view === 'rooms' && <Rooms user={user} onViewProfile={setProfileUserId} />}
         {view === 'direct' && (
           <Direct
