@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Post, PostComment, User } from '../../../shared/src/types';
 import { ApiError, addComment, createPost, deletePost, editComment, editPost, listPosts, toggleLike, toggleReaction } from '../api';
+import AgreementModal from '../components/AgreementModal';
 import EmojiPicker from '../components/EmojiPicker';
 import { EditedMark, ReactionBar, ReplyQuoteView } from '../components/MessageParts';
 import UserName, { Avatar } from '../components/UserBadge';
@@ -15,7 +16,15 @@ function timeAgo(iso: string): string {
   return new Date(iso).toLocaleDateString('mn-MN');
 }
 
-export default function Home({ user, onViewProfile }: { user: User; onViewProfile: (userId: number) => void }) {
+export default function Home({
+  user,
+  onViewProfile,
+  onUserChange,
+}: {
+  user: User;
+  onViewProfile: (userId: number) => void;
+  onUserChange?: (u: User) => void;
+}) {
   const [posts, setPosts] = useState<Post[]>([]);
   const [draft, setDraft] = useState('');
   const [commentDrafts, setCommentDrafts] = useState<Record<number, string>>({});
@@ -29,6 +38,8 @@ export default function Home({ user, onViewProfile }: { user: User; onViewProfil
   const [editingCommentId, setEditingCommentId] = useState<number | null>(null);
   const [editingCommentDraft, setEditingCommentDraft] = useState('');
   const [error, setError] = useState('');
+  // Ёс зүйн гэрээний цонх — гэрээ нь бүрэн баталгаажаагүй жижиг админд нээгдэнэ.
+  const [showAgreement, setShowAgreement] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -51,7 +62,9 @@ export default function Home({ user, onViewProfile }: { user: User; onViewProfil
   }, [refresh]);
 
   const canDelete = (post: Post): boolean =>
-    post.author.id === user.id || user.role === 'admin' || user.role === 'moderator';
+    post.author.id === user.id ||
+    user.role === 'admin' ||
+    (user.role === 'moderator' && user.agreementActive);
 
   async function submitPost(e: React.FormEvent): Promise<void> {
     e.preventDefault();
@@ -160,6 +173,34 @@ export default function Home({ user, onViewProfile }: { user: User; onViewProfil
 
   return (
     <div className="feed">
+      {user.role === 'moderator' && !user.agreementActive && (
+        <div className="agreement-card">
+          <h3>📜 Ёс зүйн гэрээ — таны эрх хүлээгдэж байна</h3>
+          <p>
+            Та жижиг админ болсон ч таны эрх (бандах, өнгө/фонт сонгох, бусдын бичлэг устгах) хараахан
+            идэвхжээгүй байна. Эхлээд та болон том админ ёс зүйн гэрээг зөвшөөрөх хэрэгтэй — хоёр тал
+            хоёул зөвшөөрөхөд таны бүх эрх автоматаар идэвхжинэ.
+          </p>
+          <p className="muted small">
+            Таны зөвшөөрөл: {user.agreementMiniAt ? '✅ Зөвшөөрсөн' : '⏳ Хүлээгдэж байна'} · Том админы
+            зөвшөөрөл: {user.agreementAdminAt ? '✅ Зөвшөөрсөн' : '⏳ Хүлээгдэж байна'}
+          </p>
+          <button type="button" className="btn-primary" onClick={() => setShowAgreement(true)}>
+            📜 Гэрээ унших
+          </button>
+        </div>
+      )}
+      {showAgreement && (
+        <AgreementModal
+          mini={user}
+          viewer={user}
+          onAgreed={(updated) => {
+            setShowAgreement(false);
+            if (onUserChange) onUserChange(updated);
+          }}
+          onClose={() => setShowAgreement(false)}
+        />
+      )}
       <form className="composer" onSubmit={submitPost}>
         <div className="composer-head">
           <Avatar user={user} showDot />
