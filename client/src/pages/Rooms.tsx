@@ -1,9 +1,9 @@
 // Нийтийн чат — одоо зөвхөн нэг нийтийн өрөө л байна. Дэлгэц дүүрэн,
 // хариулах, өөрийн мессеж засах, эможи урвал боломжтой.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { ChatMessage, User } from '../../../shared/src/types';
+import type { ChatMessage, TypingUser, User } from '../../../shared/src/types';
 import { SYSTEM_NAME } from '../../../shared/src/types';
-import { ApiError, deleteMessage, editMessage, listMessages, sendMessage, toggleReaction } from '../api';
+import { ApiError, deleteMessage, editMessage, getRoomTyping, listMessages, sendMessage, toggleReaction, typingClear, typingPing } from '../api';
 import EmojiPicker from '../components/EmojiPicker';
 import { EditedMark, ReactionBar, ReplyQuoteView, authorFontClass } from '../components/MessageParts';
 import UserName, { Avatar } from '../components/UserBadge';
@@ -16,6 +16,10 @@ export default function Rooms({ user, onViewProfile }: { user: User; onViewProfi
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editDraft, setEditDraft] = useState('');
   const [error, setError] = useState('');
+  // Яг одоо бичиж буй хүмүүс (өөрийгөө хасахгүй — сервер өөрөө хасна).
+  const [typing, setTyping] = useState<TypingUser[]>([]);
+  // Typing ping-ийн throttle — 2 секунд тутамд нэг удаа.
+  const lastPingRef = useRef(0);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const firstLoadRef = useRef(true);
@@ -29,10 +33,13 @@ export default function Rooms({ user, onViewProfile }: { user: User; onViewProfi
   const load = useCallback(async () => {
     setError('');
     try {
-      setMessages(await listMessages());
+      const data = await listMessages();
+      setMessages(data.messages);
+      setTyping(data.typing);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Мессеж ачааллахад алдаа гарлаа.');
       setMessages([]);
+      setTyping([]);
     }
   }, []);
 
@@ -47,6 +54,19 @@ export default function Rooms({ user, onViewProfile }: { user: User; onViewProfi
     }, 10000);
     return () => window.clearInterval(t);
   }, [load]);
+
+  // Typing заагчийг 3 секунд тутамд шинэчилнэ — мессежийн 10 секундын
+  // poll-оос тусдаа, хөнгөн хүсэлт (зөвхөн бичиж буй хүмүүсийн нэр).
+  useEffect(() => {
+    const t = window.setInterval(() => {
+      void getRoomTyping()
+        .then(setTyping)
+        .catch(() => {
+          // Typing poll алдаа гарвал чимээгүй өнгөрнө.
+        });
+    }, 3000);
+    return () => window.clearInterval(t);
+  }, []);
 
   // Шинэ мессеж ирэхэд заавал доош гүйлгэнэ — хэн бичсэнээс үл хамааран
   // сүүлийн чатыг гараар скролдож харах шаардлагагүй. Мессеж ирээгүй
@@ -92,8 +112,25 @@ export default function Rooms({ user, onViewProfile }: { user: User; onViewProfi
       setDraft('');
       setReplyTo(null);
       setShowEmoji(false);
+      // Илгээсний дараа өөрийн typing төлөвийг шууд арилгана.
+      void typingClear('room').catch(() => {});
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Мессеж илгээхэд алдаа гарлаа.');
+    }
+  }
+
+  /** Бичлэг өөрчлөгдөх бүрд typing ping илгээнэ (2 секундэд нэг удаа).
+      Бичлэг хоосон болвол төлөвийг шууд арилгана. */
+  function onDraftChange(value: string): void {
+    setDraft(value);
+    if (!value.trim()) {
+      void typingClear('room').catch(() => {});
+      return;
+    }
+    const now = Date.now();
+    if (now - lastPingRef.current >= 2000) {
+      lastPingRef.current = now;
+      void typingPing('room').catch(() => {});
     }
   }
 
@@ -246,13 +283,25 @@ export default function Rooms({ user, onViewProfile }: { user: User; onViewProfi
           </button>
         </div>
       )}
+      {typing.length > 0 && (
+        <div className="typing-indicator" aria-live="polite">
+          <span className="typing-dots">
+            <i />
+            <i />
+            <i />
+          </span>
+          <span>
+            {typing.map((t) => t.name).join(', ')} бичиж байна…
+          </span>
+        </div>
+      )}
       <form className="message-form chat-form" onSubmit={submit}>
         <button type="button" className="btn-ghost" onClick={() => setShowEmoji((v) => !v)}>
           😊
         </button>
         <input
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={(e) => onDraftChange(e.target.value)}
           placeholder={replyTo ? 'Хариу бичих…' : 'Мессеж бичих…'}
         />
         <button type="submit" className="btn-primary" disabled={!draft.trim()}>
