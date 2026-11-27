@@ -9,7 +9,7 @@ import Direct from './pages/Direct';
 import Profile from './pages/Profile';
 import ProfileModal from './components/ProfileModal';
 import BanNotice from './components/BanNotice';
-import { Avatar, RoleBadge } from './components/UserBadge';
+import { Avatar, AngelBadge, RoleBadge } from './components/UserBadge';
 
 type View = 'home' | 'rooms' | 'direct' | 'members' | 'profile';
 
@@ -137,6 +137,7 @@ export default function App() {
             <Avatar user={user} size="small" showDot onClick={() => setView('profile')} />
             <span className="header-user-name">{user.name}</span>
             <RoleBadge role={user.role} />
+            {user.isAngel && <AngelBadge />}
             <button type="button" className="btn-ghost small header-logout" onClick={handleLogout}>
               Гарах
             </button>
