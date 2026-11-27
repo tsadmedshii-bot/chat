@@ -1,5 +1,5 @@
 // Чат — API клиент (same-origin; Vite dev нь /api-г localhost:3001 рүү proxy хийдэг).
-import type { BanLog, ChatMessage, DirectConversation, DirectMessage, MemberRow, Post, PostComment, ReactionCount, ReactionTargetType, User, UserProfile } from '../../shared/src/types';
+import type { BanLog, ChatMessage, DirectConversation, DirectMessage, MemberRow, Post, PostComment, ReactionCount, ReactionTargetType, TypingUser, User, UserProfile } from '../../shared/src/types';
 
 const TOKEN_KEY = 'chat_token';
 
@@ -134,8 +134,8 @@ export async function listPosts(): Promise<Post[]> {
   return unwrapList(data);
 }
 
-export async function createPost(content: string): Promise<Post> {
-  const data = await api<Post | { post: Post }>('/api/posts', jsonBody({ content }));
+export async function createPost(content: string, image?: string | null): Promise<Post> {
+  const data = await api<Post | { post: Post }>('/api/posts', jsonBody({ content, image: image ?? null }));
   return unwrapOne(data);
 }
 
@@ -171,10 +171,30 @@ export async function editPost(postId: number, content: string): Promise<Post> {
   return unwrapOne(data);
 }
 
-/** Нийтийн чатын мессежүүд (одоо зөвхөн нийтийн өрөө л байна). */
-export async function listMessages(): Promise<ChatMessage[]> {
-  const data = await api<ChatMessage[] | { messages: ChatMessage[] }>('/api/rooms/public/messages');
-  return unwrapList(data);
+/** Нийтийн чатын мессежүүд + яг одоо бичиж буй хүмүүс (өөрийгөө хасахгүй). */
+export async function listMessages(): Promise<{ messages: ChatMessage[]; typing: TypingUser[] }> {
+  const data = await api<{ messages: ChatMessage[]; typing: TypingUser[] }>('/api/rooms/public/messages');
+  return { messages: data.messages ?? [], typing: data.typing ?? [] };
+}
+
+/** Нийтийн чатад яг одоо бичиж буй хүмүүс (3 секунд тутамд шинэчилнэ). */
+export async function getRoomTyping(): Promise<TypingUser[]> {
+  const data = await api<{ typing: TypingUser[] }>('/api/typing/room');
+  return data.typing ?? [];
+}
+
+/** Бичиж байгаагаа мэдэгдэх ping — 2 секунд тутамд нэг удаа илгээнэ.
+    Сервер сүүлийн ping-ээс 5 секундын дараа хугацаа нь дуусна гэж тооцно. */
+export async function typingPing(scope: 'room' | 'dm', partnerId?: number): Promise<void> {
+  await api<{ ok: boolean }>('/api/typing', jsonBody({ scope, partnerId: partnerId ?? null }));
+}
+
+/** Өөрийн typing төлөвийг шууд арилгана — мессеж илгээх, бичлэгээ арилгах үед. */
+export async function typingClear(scope: 'room' | 'dm', partnerId?: number): Promise<void> {
+  await api<void>('/api/typing', {
+    method: 'DELETE',
+    body: JSON.stringify({ scope, partnerId: partnerId ?? null }),
+  });
 }
 
 export async function sendMessage(content: string, replyToId?: number | null): Promise<ChatMessage> {
@@ -302,6 +322,18 @@ export async function getAgreementAdmin(): Promise<User> {
   return 'admin' in data ? data.admin : data;
 }
 
+/** Тэнгэр элчийн тэмдэг олгох — зөвхөн том админ, зөвхөн гоёлын тэмдэг (эрхгүй). */
+export async function adminGrantAngel(userId: number): Promise<User> {
+  const data = await api<User | { user: User }>(`/api/admin/users/${userId}/angel`, { method: 'POST' });
+  return unwrapOne(data);
+}
+
+/** Тэнгэр элчийн тэмдэг хураах — зөвхөн том админ. */
+export async function adminRevokeAngel(userId: number): Promise<User> {
+  const data = await api<User | { user: User }>(`/api/admin/users/${userId}/revoke-angel`, { method: 'POST' });
+  return unwrapOne(data);
+}
+
 /** Хэрэглэгчийн аккоунтийг устгах (пост, мессеж, чаттай нь хамт) — зөвхөн том админ. */
 export async function adminDeleteUser(userId: number): Promise<void> {
   await api<void>(`/api/admin/users/${userId}`, { method: 'DELETE' });
@@ -340,9 +372,15 @@ export async function listDmConversations(): Promise<DirectConversation[]> {
   return unwrapList(data);
 }
 
-export async function listDmMessages(userId: number): Promise<DirectMessage[]> {
-  const data = await api<DirectMessage[] | { messages: DirectMessage[] }>(`/api/dm/${userId}`);
-  return unwrapList(data);
+export async function listDmMessages(userId: number): Promise<{ messages: DirectMessage[]; typing: boolean }> {
+  const data = await api<{ messages: DirectMessage[]; typing: boolean }>(`/api/dm/${userId}`);
+  return { messages: data.messages ?? [], typing: data.typing ?? false };
+}
+
+/** Ярилцагч яг одоо надад бичиж байгаа эсэх (3 секунд тутамд шинэчилнэ). */
+export async function getDmTyping(userId: number): Promise<boolean> {
+  const data = await api<{ typing: boolean }>(`/api/typing/dm/${userId}`);
+  return data.typing ?? false;
 }
 
 export async function sendDm(userId: number, content: string, replyToId?: number | null): Promise<DirectMessage> {
