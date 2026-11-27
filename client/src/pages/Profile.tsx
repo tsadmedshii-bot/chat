@@ -4,7 +4,7 @@ import { STYLE_FONTS } from '../../../shared/src/types';
 import { ApiError, deleteMyAccount, getUserProfile, logout, me, removeAvatar, setMyStyle, uploadAvatar } from '../api';
 import AgreementModal from '../components/AgreementModal';
 import InstallApp from '../components/InstallApp';
-import { Avatar, RoleBadge } from '../components/UserBadge';
+import { Avatar, AngelBadge, RoleBadge } from '../components/UserBadge';
 import Lightbox from '../components/Lightbox';
 
 /** Бичлэгийн өнгөний бэлэн сонголтууд («Гишүүд» хуудасныхтай ижил). */
@@ -208,6 +208,7 @@ export default function Profile({ user, onUserChange, onAccountDeleted }: { user
         <p className="muted">@{user.username}</p>
         <div className="profile-modal-badges">
           <RoleBadge role={user.role} />
+          {user.isAngel && <AngelBadge />}
         </div>
         <div className="profile-stats">
           <div>
