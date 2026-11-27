@@ -884,6 +884,89 @@ img.avatar {
   margin: 12px 0;
 }
 
+/* Постын зураг — дарж томруулна (Lightbox). */
+.post-image-btn {
+  display: block;
+  width: 100%;
+  padding: 0;
+  margin: 0 0 12px;
+  background: none;
+  border: none;
+  cursor: zoom-in;
+  text-align: left;
+}
+
+.post-image {
+  display: block;
+  max-width: 100%;
+  max-height: 480px;
+  width: auto;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+}
+
+/* Зураг хавсаргах үеийн урьдчилан харах. */
+.post-image-preview {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 8px 0;
+}
+
+.post-image-preview img {
+  max-width: 160px;
+  max-height: 160px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+}
+
+/* Typing заагч — "Нэр бичиж байна…" + хөдөлгөөнт 3 цэг.
+   Мессежийн жагсаалтаас ГАДНА (хэлбэрийн дээр) байдаг тул
+   auto-scroll логикт огт нөлөөлөхгүй. */
+.typing-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.typing-dots {
+  display: inline-flex;
+  gap: 3px;
+  align-items: center;
+}
+
+.typing-dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: typing-bounce 1.2s infinite ease-in-out;
+}
+
+.typing-dots i:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.typing-dots i:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes typing-bounce {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  30% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+
 .post-actions {
   display: flex;
   gap: 16px;
@@ -975,6 +1058,16 @@ img.avatar {
   background: linear-gradient(135deg, #8b7cf6, #6d5bd0);
   color: #fff;
   box-shadow: 0 0 12px rgba(139, 124, 246, 0.5);
+}
+
+/* Тэнгэр элчийн тэмдэг — хар/бараан дэвсгэр дээр цагаан далавчтай
+   сахиусан тэнгэр (halo 😇 + цагаан далавч 🪽). Алтан админ тэмдэг,
+   slate-violet жижиг админ тэмдэг хоёроос ялгаатай, гоёмсог. */
+.role-angel {
+  background: linear-gradient(135deg, #14141f, #2b2b40);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.28);
 }
 
 .user-name-text {
