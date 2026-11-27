@@ -4,10 +4,12 @@ import {
   ApiError,
   adminBanUser,
   adminDeleteUser,
+  adminGrantAngel,
   adminGrantBanPermission,
   adminGrantModerator,
   adminGrantStylePermission,
   adminListMembers,
+  adminRevokeAngel,
   adminRevokeBanPermission,
   adminRevokeModerator,
   adminRevokeStylePermission,
@@ -17,7 +19,7 @@ import {
   setTextColor,
 } from '../api';
 import AgreementModal from '../components/AgreementModal';
-import UserName, { Avatar } from '../components/UserBadge';
+import UserName, { AngelBadge, Avatar } from '../components/UserBadge';
 
 /** Хэрэглэгч одоо бантай эсэх — байнга бан ЭСВЭЛ хугацаа нь дуусаагүй бан. */
 function isBannedUser(u: User): boolean {
@@ -284,6 +286,29 @@ export default function Members({
     }
   }
 
+  /** Тэнгэр элчийн тэмдэг олгох — зөвхөн гоёлын тэмдэг, ямар ч эрх дагалдахгүй. */
+  async function grantAngel(id: number, name: string): Promise<void> {
+    setError('');
+    try {
+      await adminGrantAngel(id);
+      setNotice(`«${name}» хэрэглэгчид 😇🪽 Тэнгэр элчийн тэмдэг олголоо.`);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Алдаа гарлаа.');
+    }
+  }
+
+  async function revokeAngel(id: number, name: string): Promise<void> {
+    setError('');
+    try {
+      await adminRevokeAngel(id);
+      setNotice(`«${name}» хэрэглэгчийн Тэнгэр элчийн тэмдгийг хураалаа.`);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Алдаа гарлаа.');
+    }
+  }
+
   async function setColor(id: number, color: string | null): Promise<void> {
     setError('');
     try {
@@ -415,6 +440,16 @@ export default function Members({
                 💬 Чат
               </button>
             )}
+            {isAdmin &&
+              (row.user.isAngel ? (
+                <button type="button" className="btn-ghost small" onClick={() => void revokeAngel(row.user.id, row.user.name)}>
+                  😇 Тэмдэг хураах
+                </button>
+              ) : (
+                <button type="button" className="btn-ghost small" onClick={() => void grantAngel(row.user.id, row.user.name)}>
+                  😇🪽 Тэнгэр элч болгох
+                </button>
+              ))}
             {isAdmin && row.user.role === 'member' && (
               <button type="button" className="btn-ghost small" onClick={() => void grant(row.user.id)}>
                 ⚔️🛡️ Жижиг админ болгох
