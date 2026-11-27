@@ -11,6 +11,20 @@ export function RoleBadge({ role }: { role: User['role'] }) {
   return null;
 }
 
+/**
+ * Тэнгэр элчийн тэмдэг — ЗӨВХӨН гоёлын тэмдэг, ямар ч эрх дагалдахгүй.
+ * Том админ онцгой хүнд олгоно. Харагдах байдал: хар/бараан дэвсгэр дээр
+ * цагаан далавчтай сахиусан тэнгэр (halo 😇 + цагаан далавч 🪽) —
+ * алтан админ тэмдэг, slate-violet жижиг админ тэмдэг хоёроос ялгаатай.
+ */
+export function AngelBadge() {
+  return (
+    <span className="role-badge role-angel" title="Тэнгэр элч — том админы олгосон гоёлын тэмдэг">
+      😇🪽 ТЭНГЭР ЭЛЧ
+    </span>
+  );
+}
+
 /** 🟢 онлайн / ⚪ офлайн цэг. */
 export function OnlineDot({ online }: { online: boolean }) {
   return (
@@ -75,6 +89,7 @@ export default function UserName({ user, className, showOnline = false }: { user
   return (
     <span className={className ?? 'user-name'}>
       <RoleBadge role={user.role} />
+      {user.isAngel && <AngelBadge />}
       <span className="user-name-text">
         {user.name}
         {showOnline && <OnlineDot online={user.online} />}
