@@ -26,6 +26,9 @@ export interface User {
   /** Жижиг админы сонгосон фонтын түлхүүр — эрх нь байж байж л
       харагдана, байхгүй бол null. */
   textFont: string | null;
+  /** Тэнгэр элчийн тэмдэг — ЗӨВХӨН гоёлын тэмдэг, ямар ч эрх дагалдахгүй.
+      Зөвхөн том админ олгоно/хураана. */
+  isAngel: boolean;
   /** Профайл зураг (data URL) — байхгүй бол null. */
   avatar: string | null;
   /** Бичлэгийн өнгө ('#RRGGBB') — зөвхөн том админ онооно, байхгүй бол null. */
@@ -174,6 +177,8 @@ export interface Post {
   id: number;
   author: User;
   content: string;
+  /** Постын зураг (data URL) — байхгүй бол null. */
+  image: string | null;
   likeCount: number;
   likedByMe: boolean;
   comments: PostComment[];
@@ -234,6 +239,14 @@ export interface DirectConversation {
   user: User;
   lastMessage: { content: string; createdAt: string; senderId: number } | null;
   unreadCount: number;
+  /** Ярилцагч яг одоо надад бичиж байгаа эсэх. */
+  typing: boolean;
+}
+
+/** Typing заагч — нийтийн чатад яг одоо бичиж буй хэрэглэгч. */
+export interface TypingUser {
+  userId: number;
+  name: string;
 }
 
 /** Хэрэглэгчийн профайл — нийтэд харагдах хэрэглэгч + түүний постын тоо. */
