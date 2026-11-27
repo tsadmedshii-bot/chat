@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Post, PostComment, User } from '../../../shared/src/types';
 import { ApiError, addComment, createPost, deletePost, editComment, editPost, listPosts, toggleLike, toggleReaction } from '../api';
 import AgreementModal from '../components/AgreementModal';
 import EmojiPicker from '../components/EmojiPicker';
 import { EditedMark, ReactionBar, ReplyQuoteView } from '../components/MessageParts';
 import UserName, { Avatar } from '../components/UserBadge';
+import Lightbox from '../components/Lightbox';
+import { resizePostImageToDataUrl } from '../components/imageUtils';
 
 function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -40,6 +42,21 @@ export default function Home({
   const [error, setError] = useState('');
   // Ёс зүйн гэрээний цонх — гэрээ нь бүрэн баталгаажаагүй жижиг админд нээгдэнэ.
   const [showAgreement, setShowAgreement] = useState(false);
+  // Постын зураг — хавсаргасан зургийн data URL + томруулж харах төлөв.
+  const [postImage, setPostImage] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+  const imageFileRef = useRef<HTMLInputElement | null>(null);
+
+  // Escape: том зургийг хаана.
+  useEffect(() => {
+    if (!lightboxSrc) return;
+    function onKey(e: KeyboardEvent): void {
+      if (e.key === 'Escape') setLightboxSrc(null);
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [lightboxSrc]);
 
   const refresh = useCallback(async () => {
     try {
@@ -68,15 +85,36 @@ export default function Home({
 
   async function submitPost(e: React.FormEvent): Promise<void> {
     e.preventDefault();
-    if (!draft.trim()) return;
+    if (!draft.trim() && !postImage) return;
     setError('');
     try {
-      const post = await createPost(draft.trim());
+      const post = await createPost(draft.trim(), postImage);
       setPosts((prev) => [post, ...prev]);
       setDraft('');
+      setPostImage(null);
       setShowEmoji(false);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Пост оруулахад алдаа гарлаа.');
+    }
+  }
+
+  async function onPickPostImage(e: React.ChangeEvent<HTMLInputElement>): Promise<void> {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setError('');
+    if (!file.type.startsWith('image/')) {
+      setError('Зөвхөн зураг сонгоно уу');
+      return;
+    }
+    setUploadingImage(true);
+    try {
+      const dataUrl = await resizePostImageToDataUrl(file);
+      setPostImage(dataUrl);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Зураг оруулахад алдаа гарлаа.');
+    } finally {
+      setUploadingImage(false);
     }
   }
 
@@ -211,11 +249,29 @@ export default function Home({
             rows={3}
           />
         </div>
+        {postImage && (
+          <div className="post-image-preview">
+            <img src={postImage} alt="Хавсаргасан зураг" />
+            <button type="button" className="btn-danger-ghost small" onClick={() => setPostImage(null)} title="Зураг хасах">
+              ✕ Зураг хасах
+            </button>
+          </div>
+        )}
+        <input
+          ref={imageFileRef}
+          type="file"
+          accept="image/*"
+          hidden
+          onChange={(e) => void onPickPostImage(e)}
+        />
         <div className="composer-actions">
           <button type="button" className="btn-ghost" onClick={() => setShowEmoji((v) => !v)}>
             😊 Эможи
           </button>
-          <button type="submit" className="btn-primary" disabled={!draft.trim()}>
+          <button type="button" className="btn-ghost" disabled={uploadingImage} onClick={() => imageFileRef.current?.click()}>
+            {uploadingImage ? 'Ачааллаж байна…' : '🖼️ Зураг'}
+          </button>
+          <button type="submit" className="btn-primary" disabled={(!draft.trim() && !postImage) || uploadingImage}>
             Нийтлэх
           </button>
         </div>
@@ -223,6 +279,7 @@ export default function Home({
           <EmojiPicker onPick={(e) => setDraft((d) => d + e)} onClose={() => setShowEmoji(false)} />
         )}
       </form>
+      <p className="muted small">Зураг автоматаар 1200px хүртэл жижигрэнэ. Зөвхөн JPEG, PNG, WebP — 1 MB хүртэл. Пост хэзээ ч устахгүй.</p>
       {error && <p className="error">{error}</p>}
 
       {posts.length === 0 && (
@@ -269,7 +326,19 @@ export default function Home({
               </div>
             </div>
           ) : (
-            <p className="post-content">{post.content}</p>
+            <>
+              {post.content && <p className="post-content">{post.content}</p>}
+              {post.image && (
+                <button
+                  type="button"
+                  className="post-image-btn"
+                  onClick={() => setLightboxSrc(post.image)}
+                  aria-label="Зургийг томруулж харах"
+                >
+                  <img className="post-image" src={post.image} alt="Постын зураг" />
+                </button>
+              )}
+            </>
           )}
           <div className="post-actions">
             <button
@@ -376,6 +445,7 @@ export default function Home({
           </div>
         </article>
       ))}
+      {lightboxSrc && <Lightbox src={lightboxSrc} alt="Постын зураг" onClose={() => setLightboxSrc(null)} />}
     </div>
   );
 }
