@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DirectConversation, DirectMessage, User } from '../../../shared/src/types';
-import { ApiError, deleteDm, editDm, listDmConversations, listDmMessages, sendDm, toggleReaction } from '../api';
+import { ApiError, deleteDm, editDm, getDmTyping, listDmConversations, listDmMessages, sendDm, toggleReaction, typingClear, typingPing } from '../api';
 import { EditedMark, ReactionBar, ReplyQuoteView, authorFontClass } from '../components/MessageParts';
 import { Avatar } from '../components/UserBadge';
 
@@ -23,6 +23,10 @@ export default function Direct({
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editDraft, setEditDraft] = useState('');
   const [error, setError] = useState('');
+  // Ярилцагч яг одоо надад бичиж байгаа эсэх.
+  const [typing, setTyping] = useState(false);
+  // Typing ping-ийн throttle — 2 секунд тутамд нэг удаа.
+  const lastPingRef = useRef(0);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const firstLoadRef = useRef(true);
@@ -42,7 +46,9 @@ export default function Direct({
   const loadThread = useCallback(
     async (partnerId: number) => {
       try {
-        setMessages(await listDmMessages(partnerId));
+        const data = await listDmMessages(partnerId);
+        setMessages(data.messages);
+        setTyping(data.typing);
         // Сервер уншсан гэж тэмдэглэсэн тул тоог шинэчилнэ.
         await refreshConversations();
       } catch (err) {
@@ -69,11 +75,28 @@ export default function Direct({
     if (!selectedId) return;
     const t = window.setInterval(() => {
       void listDmMessages(selectedId)
-        .then(setMessages)
+        .then((data) => {
+          setMessages(data.messages);
+          setTyping(data.typing);
+        })
         .catch(() => {
           // Poll алдаа гарвал чимээгүй өнгөрнө.
         });
     }, 5000);
+    return () => window.clearInterval(t);
+  }, [selectedId]);
+
+  // Typing заагчийг 3 секунд тутамд шинэчилнэ — мессежийн 5 секундын
+  // poll-оос тусдаа, хөнгөн хүсэлт.
+  useEffect(() => {
+    if (!selectedId) return;
+    const t = window.setInterval(() => {
+      void getDmTyping(selectedId)
+        .then(setTyping)
+        .catch(() => {
+          // Typing poll алдаа гарвал чимээгүй өнгөрнө.
+        });
+    }, 3000);
     return () => window.clearInterval(t);
   }, [selectedId]);
 
@@ -110,6 +133,7 @@ export default function Direct({
     if (partnerId === selectedId) return;
     setSelectedId(partnerId);
     setMessages([]);
+    setTyping(false);
     setReplyTo(null);
     setEditingId(null);
     firstLoadRef.current = true;
@@ -126,9 +150,27 @@ export default function Direct({
       setMessages((prev) => [...prev, msg]);
       setDraft('');
       setReplyTo(null);
+      // Илгээсний дараа өөрийн typing төлөвийг шууд арилгана.
+      void typingClear('dm', selectedId).catch(() => {});
       await refreshConversations();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Мессеж илгээхэд алдаа гарлаа.');
+    }
+  }
+
+  /** Бичлэг өөрчлөгдөх бүрд typing ping илгээнэ (2 секундэд нэг удаа).
+      Бичлэг хоосон болвол төлөвийг шууд арилгана. */
+  function onDraftChange(value: string): void {
+    setDraft(value);
+    if (!selectedId) return;
+    if (!value.trim()) {
+      void typingClear('dm', selectedId).catch(() => {});
+      return;
+    }
+    const now = Date.now();
+    if (now - lastPingRef.current >= 2000) {
+      lastPingRef.current = now;
+      void typingPing('dm', selectedId).catch(() => {});
     }
   }
 
@@ -202,9 +244,11 @@ export default function Direct({
                   className={previewFont ? `dm-item-preview ${previewFont}` : 'dm-item-preview'}
                   style={c.lastMessage && previewSender.textColor ? { color: previewSender.textColor } : undefined}
                 >
-                  {c.lastMessage
-                    ? `${c.lastMessage.senderId === user.id ? 'Та: ' : ''}${c.lastMessage.content}`
-                    : 'Одоохондоо мессеж алга'}
+                  {c.typing
+                    ? '✍️ бичиж байна…'
+                    : c.lastMessage
+                      ? `${c.lastMessage.senderId === user.id ? 'Та: ' : ''}${c.lastMessage.content}`
+                      : 'Одоохондоо мессеж алга'}
                 </span>
               </span>
               {c.unreadCount > 0 && <span className="unread-badge">{c.unreadCount}</span>}
@@ -297,10 +341,20 @@ export default function Direct({
                 </button>
               </div>
             )}
+            {typing && (
+              <div className="typing-indicator" aria-live="polite">
+                <span className="typing-dots">
+                  <i />
+                  <i />
+                  <i />
+                </span>
+                <span>{selected.user.name} бичиж байна…</span>
+              </div>
+            )}
             <form className="message-form" onSubmit={submit}>
               <input
                 value={draft}
-                onChange={(e) => setDraft(e.target.value)}
+                onChange={(e) => onDraftChange(e.target.value)}
                 placeholder={replyTo ? 'Хариу бичих…' : `${selected.user.name}-д мессеж бичих…`}
               />
               <button type="submit" className="btn-primary" disabled={!draft.trim()}>
