@@ -1,12 +1,12 @@
 // Чат — /api чиглүүлэгч (бүх endpoint энд).
 import { Router } from 'express';
 import type { NextFunction, Request, Response } from 'express';
-import { and, asc, desc, eq, isNull, or } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, isNull, ne, or } from 'drizzle-orm';
 import { db } from './db';
-import { directMessages, dmReads, messages, postComments, postLikes, posts, reactions, roomAccess, sessions, users, banLogs } from './schema';
+import { directMessages, dmReads, messages, postComments, postLikes, posts, reactions, roomAccess, sessions, typingStates, users, banLogs } from './schema';
 import type { AuthUser } from './auth';
 import { createSession, deleteSession, HttpError, banMessage, isBannedNow, registerUser, requireAdmin, requireAuth, verifyPassword, isAgreementComplete, effectiveCanBan, effectiveCanStyle } from './auth';
-import type { BanLog, ChatMessage, DirectConversation, DirectMessage, MemberRow, MessageKind, Post, PostComment, ReactionCount, ReactionTargetType, ReplyQuote, Role, Room, User } from '../../shared/src/types';
+import type { BanLog, ChatMessage, DirectConversation, DirectMessage, MemberRow, MessageKind, Post, PostComment, ReactionCount, ReactionTargetType, ReplyQuote, Role, Room, TypingUser, User } from '../../shared/src/types';
 import { REACTION_EMOJIS, SYSTEM_NAME, TEXT_FONT_KEYS } from '../../shared/src/types';
 
 export const router = Router();
@@ -23,13 +23,13 @@ function isOnline(lastSeenAt: Date | null): boolean {
   return Date.now() - lastSeenAt.getTime() <= ONLINE_WINDOW_MS;
 }
 
-function publicUser(row: { id: number; name: string; username: string; role: string; banned: boolean; bannedUntil: Date | null; canBan: boolean; canStyle: boolean; agreementMiniAt: Date | null; agreementAdminAt: Date | null; avatar: string | null; textColor: string | null; textFont: string | null; lastSeenAt: Date | null; createdAt: Date }): User {
-  return { id: row.id, name: row.name, username: row.username, role: row.role as Role, banned: row.banned, bannedUntil: row.bannedUntil ? toIso(row.bannedUntil) : null, canBan: row.canBan, canStyle: row.canStyle, agreementMiniAt: row.agreementMiniAt ? toIso(row.agreementMiniAt) : null, agreementAdminAt: row.agreementAdminAt ? toIso(row.agreementAdminAt) : null, agreementActive: isAgreementComplete(row.agreementMiniAt, row.agreementAdminAt), avatar: row.avatar ?? null, textColor: row.textColor ?? null, textFont: row.canStyle && isAgreementComplete(row.agreementMiniAt, row.agreementAdminAt) ? (row.textFont ?? null) : null, lastSeenAt: row.lastSeenAt ? toIso(row.lastSeenAt) : null, online: isOnline(row.lastSeenAt), createdAt: toIso(row.createdAt) };
+function publicUser(row: { id: number; name: string; username: string; role: string; banned: boolean; bannedUntil: Date | null; canBan: boolean; canStyle: boolean; agreementMiniAt: Date | null; agreementAdminAt: Date | null; avatar: string | null; textColor: string | null; textFont: string | null; isAngel: boolean; lastSeenAt: Date | null; createdAt: Date }): User {
+  return { id: row.id, name: row.name, username: row.username, role: row.role as Role, banned: row.banned, bannedUntil: row.bannedUntil ? toIso(row.bannedUntil) : null, canBan: row.canBan, canStyle: row.canStyle, agreementMiniAt: row.agreementMiniAt ? toIso(row.agreementMiniAt) : null, agreementAdminAt: row.agreementAdminAt ? toIso(row.agreementAdminAt) : null, agreementActive: isAgreementComplete(row.agreementMiniAt, row.agreementAdminAt), avatar: row.avatar ?? null, textColor: row.textColor ?? null, textFont: row.canStyle && isAgreementComplete(row.agreementMiniAt, row.agreementAdminAt) ? (row.textFont ?? null) : null, isAngel: row.isAngel, lastSeenAt: row.lastSeenAt ? toIso(row.lastSeenAt) : null, online: isOnline(row.lastSeenAt), createdAt: toIso(row.createdAt) };
 }
 
 /** Устгагдсан хэрэглэгчийн оронд харуулдаг орлуулагч. */
 function deletedUser(authorId: number, createdAt: Date): User {
-  return { id: authorId, name: 'Устгасан хэрэглэгч', username: '', role: 'member' as Role, banned: false, bannedUntil: null, canBan: false, canStyle: false, agreementMiniAt: null, agreementAdminAt: null, agreementActive: false, avatar: null, textColor: null, textFont: null, lastSeenAt: null, online: false, createdAt: toIso(createdAt) };
+  return { id: authorId, name: 'Устгасан хэрэглэгч', username: '', role: 'member' as Role, banned: false, bannedUntil: null, canBan: false, canStyle: false, agreementMiniAt: null, agreementAdminAt: null, agreementActive: false, avatar: null, textColor: null, textFont: null, isAngel: false, lastSeenAt: null, online: false, createdAt: toIso(createdAt) };
 }
 
 function toDirectMessage(row: { id: number; senderId: number; recipientId: number; content: string; replyAuthorName: string | null; replyText: string | null; editedAt: Date | null; createdAt: Date }, reactionRows: { targetType: string; targetId: number; emoji: string; userId: number }[], meId: number): DirectMessage {
@@ -318,6 +318,28 @@ router.get(
 
 // ---------------------------------------------------------------- пост (нүүр)
 
+/** Постын зураг — data URL (JPEG/PNG/WebP, 1 MB хүртэл). Байхгүй бол null. */
+const MAX_POST_IMAGE_LENGTH = 1024 * 1024;
+
+function validatePostImage(value: unknown): string | null {
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value !== 'string') {
+    throw new HttpError(400, 'Зураг буруу байна');
+  }
+  if (value.length > MAX_POST_IMAGE_LENGTH) {
+    throw new HttpError(400, 'Зураг хэт том байна — 1 MB-аас бага зураг сонгоно уу');
+  }
+  const prefix = AVATAR_PREFIXES.find((p) => value.startsWith(p));
+  if (!prefix) {
+    throw new HttpError(400, 'Зөвхөн JPEG, PNG эсвэл WebP зураг оруулж болно');
+  }
+  const payload = value.slice(prefix.length);
+  if (!/^[A-Za-z0-9+/=]+$/.test(payload)) {
+    throw new HttpError(400, 'Зургийн мэдээлэл буруу байна');
+  }
+  return value;
+}
+
 async function listPosts(meId: number): Promise<Post[]> {
   const postRows = await db.select().from(posts).orderBy(desc(posts.createdAt)).limit(50);
   if (postRows.length === 0) return [];
@@ -357,6 +379,7 @@ async function listPosts(meId: number): Promise<Post[]> {
       id: p.id,
       author: author ?? deletedUser(p.authorId, p.createdAt),
       content: p.content,
+      image: p.image ?? null,
       likeCount: likes.count,
       likedByMe: likes.mine,
       comments: commentsByPost.get(p.id) ?? [],
@@ -377,16 +400,22 @@ router.post(
   ah(async (req, res) => {
     const u = req.user as AuthUser;
     const content = String(req.body?.content ?? '').trim();
-    if (content.length < 1 || content.length > 2000) {
-      throw new HttpError(400, 'Пост 1–2000 тэмдэгт байх ёстой');
+    // Постын зураг — сонголттой. Текстгүй бол зураг заавал байх ёстой.
+    const image = validatePostImage(req.body?.image);
+    if (content.length > 2000) {
+      throw new HttpError(400, 'Пост 2000 тэмдэгтээс их байх ёсгүй');
     }
-    const inserted = await db.insert(posts).values({ authorId: u.id, content }).returning();
+    if (content.length < 1 && image === null) {
+      throw new HttpError(400, 'Пост бичих юмуу зураг хавсаргана уу');
+    }
+    const inserted = await db.insert(posts).values({ authorId: u.id, content, image }).returning();
     const row = inserted[0];
     res.status(201).json({
       post: {
         id: row.id,
         author: publicUser({ ...u, createdAt: u.createdAt }),
         content: row.content,
+        image: row.image ?? null,
         likeCount: 0,
         likedByMe: false,
         comments: [],
@@ -546,18 +575,17 @@ router.delete(
 // ---------------------------------------------------------------- нийтийн чат
 // Одоо зөвхөн нийтийн өрөө л байна — зөвшөөрөлтэй өрөөг хаасан.
 
-async function listMessages(meId: number): Promise<ChatMessage[]> {
+async function listMessages(meId: number): Promise<{ messages: ChatMessage[]; typing: TypingUser[] }> {
   const rows = await db
     .select()
     .from(messages)
     .where(eq(messages.room, 'public'))
     .orderBy(asc(messages.createdAt))
     .limit(200);
-  if (rows.length === 0) return [];
   const userRows = await db.select().from(users);
   const userById = new Map(userRows.map((u) => [u.id, publicUser(u)]));
   const reactionRows = await loadAllReactions();
-  return rows.map((m) => {
+  const list: ChatMessage[] = rows.map((m) => {
     // Угтах мессежид хүн зохиогч байхгүй — author null.
     const author =
       m.kind === 'welcome'
@@ -577,6 +605,7 @@ async function listMessages(meId: number): Promise<ChatMessage[]> {
       createdAt: toIso(m.createdAt),
     };
   });
+  return { messages: list, typing: await roomTypists(meId) };
 }
 
 router.get(
@@ -585,7 +614,7 @@ router.get(
   ah(async (req, res) => {
     const u = req.user as AuthUser;
     parseRoom(req);
-    res.json({ messages: await listMessages(u.id) });
+    res.json(await listMessages(u.id));
   }),
 );
 
@@ -712,6 +741,143 @@ router.delete(
   }),
 );
 
+// ---------------------------------------------------------------- typing заагч
+// Хэн нэгэн бичиж байхад бусдад нь "Нэр бичиж байна…" гэж харуулна.
+// Клиент бичиж байхдаа 2 секунд тутамд ping илгээнэ; сервер
+// typing_until-ийг сүүлийн ping + 5 секунд гэж тооцно. Polling-той
+// зохицсон хөнгөн шийдэл — websocket байхгүй, мессежний 15 минутын
+// хугацаа болон auto-scroll логикт огт нөлөөлөхгүй.
+
+/** Typing төлөвний хугацаа — сүүлийн ping-ээс хойш 5 секунд. */
+const TYPING_TTL_MS = 5_000;
+
+/** Нийтийн чатад яг одоо бичиж буй хүмүүс (өөрийгөө хасахгүй). */
+async function roomTypists(meId: number): Promise<TypingUser[]> {
+  const since = new Date(Date.now() - TYPING_TTL_MS);
+  const rows = await db
+    .select({ userId: typingStates.userId, name: users.name })
+    .from(typingStates)
+    .innerJoin(users, eq(typingStates.userId, users.id))
+    .where(
+      and(
+        eq(typingStates.scope, 'room'),
+        gt(typingStates.updatedAt, since),
+        ne(typingStates.userId, meId),
+      ),
+    )
+    .orderBy(asc(typingStates.updatedAt));
+  return rows;
+}
+
+/** Тухайн ярилцагч яг одоо надад (meId) хувь чат бичиж байгаа эсэх. */
+async function isPartnerTyping(partnerId: number, meId: number): Promise<boolean> {
+  const since = new Date(Date.now() - TYPING_TTL_MS);
+  const rows = await db
+    .select({ userId: typingStates.userId })
+    .from(typingStates)
+    .where(
+      and(
+        eq(typingStates.scope, 'dm'),
+        eq(typingStates.userId, partnerId),
+        eq(typingStates.targetId, meId),
+        gt(typingStates.updatedAt, since),
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
+}
+
+router.post(
+  '/typing',
+  requireAuth,
+  ah(async (req, res) => {
+    const u = req.user as AuthUser;
+    const scope = String(req.body?.scope ?? '');
+    if (scope === 'room') {
+      await db
+        .insert(typingStates)
+        .values({ userId: u.id, scope: 'room', targetId: 0 })
+        .onConflictDoUpdate({
+          target: [typingStates.userId, typingStates.scope, typingStates.targetId],
+          set: { updatedAt: new Date() },
+        });
+    } else if (scope === 'dm') {
+      const partnerId = Number(req.body?.partnerId);
+      if (!Number.isInteger(partnerId) || partnerId < 1) {
+        throw new HttpError(400, 'Хувь чатын ярилцагч буруу байна');
+      }
+      if (partnerId === u.id) {
+        throw new HttpError(400, 'Өөртөө typing илгээж болохгүй');
+      }
+      const partnerRows = await db.select({ id: users.id }).from(users).where(eq(users.id, partnerId)).limit(1);
+      if (!partnerRows[0]) throw new HttpError(404, 'Хэрэглэгч олдсонгүй');
+      await db
+        .insert(typingStates)
+        .values({ userId: u.id, scope: 'dm', targetId: partnerId })
+        .onConflictDoUpdate({
+          target: [typingStates.userId, typingStates.scope, typingStates.targetId],
+          set: { updatedAt: new Date() },
+        });
+    } else {
+      throw new HttpError(400, 'Typing төрөл буруу байна');
+    }
+    res.json({ ok: true });
+  }),
+);
+
+/** Өөрийн typing төлөвийг шууд арилгана — мессеж илгээх, бичлэгээ арилгах үед. */
+router.delete(
+  '/typing',
+  requireAuth,
+  ah(async (req, res) => {
+    const u = req.user as AuthUser;
+    const scope = String(req.body?.scope ?? '');
+    if (scope === 'room') {
+      await db
+        .delete(typingStates)
+        .where(and(eq(typingStates.userId, u.id), eq(typingStates.scope, 'room')));
+    } else if (scope === 'dm') {
+      const partnerId = Number(req.body?.partnerId);
+      if (!Number.isInteger(partnerId) || partnerId < 1) {
+        throw new HttpError(400, 'Хувь чатын ярилцагч буруу байна');
+      }
+      await db
+        .delete(typingStates)
+        .where(
+          and(
+            eq(typingStates.userId, u.id),
+            eq(typingStates.scope, 'dm'),
+            eq(typingStates.targetId, partnerId),
+          ),
+        );
+    } else {
+      throw new HttpError(400, 'Typing төрөл буруу байна');
+    }
+    res.status(204).send();
+  }),
+);
+
+router.get(
+  '/typing/room',
+  requireAuth,
+  ah(async (req, res) => {
+    const u = req.user as AuthUser;
+    res.json({ typing: await roomTypists(u.id) });
+  }),
+);
+
+router.get(
+  '/typing/dm/:userId',
+  requireAuth,
+  ah(async (req, res) => {
+    const u = req.user as AuthUser;
+    const partnerId = parseId(req, 'Хэрэглэгч олдсонгүй', 'userId');
+    const partnerRows = await db.select({ id: users.id }).from(users).where(eq(users.id, partnerId)).limit(1);
+    if (!partnerRows[0]) throw new HttpError(404, 'Хэрэглэгч олдсонгүй');
+    res.json({ typing: await isPartnerTyping(partnerId, u.id) });
+  }),
+);
+
 // ---------------------------------------------------------------- эможи урвал
 // Нэг хэрэглэгч нэг зүйл дээр нэг л урвал үлдээнэ: ижил эможи дахин
 // дарвал арилна, өөр эможи дарвал солигдоно. Постын ❤️ лайк нь
@@ -776,6 +942,19 @@ router.get(
       .orderBy(desc(directMessages.createdAt));
     const readRows = await db.select().from(dmReads).where(eq(dmReads.userId, u.id));
     const lastReadByPartner = new Map(readRows.map((r) => [r.partnerId, r.lastReadAt]));
+    // Яг одоо надад бичиж байгаа ярилцагчид.
+    const typingSince = new Date(Date.now() - TYPING_TTL_MS);
+    const typingRows = await db
+      .select({ userId: typingStates.userId })
+      .from(typingStates)
+      .where(
+        and(
+          eq(typingStates.scope, 'dm'),
+          eq(typingStates.targetId, u.id),
+          gt(typingStates.updatedAt, typingSince),
+        ),
+      );
+    const typingByUser = new Set(typingRows.map((r) => r.userId));
 
     const conversations: DirectConversation[] = userRows
       .filter((row) => row.id !== u.id)
@@ -796,6 +975,7 @@ router.get(
             ? { content: last.content, createdAt: toIso(last.createdAt), senderId: last.senderId }
             : null,
           unreadCount,
+          typing: typingByUser.has(row.id),
         };
       });
 
@@ -837,7 +1017,10 @@ router.get(
       .values({ userId: u.id, partnerId, lastReadAt: now })
       .onConflictDoUpdate({ target: [dmReads.userId, dmReads.partnerId], set: { lastReadAt: now } });
     const reactionRows = await loadAllReactions();
-    res.json({ messages: rows.map((r) => toDirectMessage(r, reactionRows, u.id)) });
+    res.json({
+      messages: rows.map((r) => toDirectMessage(r, reactionRows, u.id)),
+      typing: await isPartnerTyping(partnerId, u.id),
+    });
   }),
 );
 
@@ -1180,6 +1363,29 @@ router.post('/admin/users/:id/style-permission', requireAuth, requireAdmin, ah(a
 
 router.post('/admin/users/:id/revoke-style-permission', requireAuth, requireAdmin, ah(async (req, res) => {
   const user = await setStylePermission(parseId(req, 'Хэрэглэгч олдсонгүй'), false);
+  res.json({ user });
+}));
+
+// ---------------------------------------------------------------- тэнгэр элчийн тэмдэг (зөвхөн том админ)
+// ЗӨВХӨН гоёлын тэмдэг — ямар ч эрх дагалдахгүй. canBan/canStyle болон
+// бусдын бичлэг устгах эрхтэй огт холбоогүй; зөвхөн нэрний дээрх
+// тэмдэг (😇🪽 ТЭНГЭР ЭЛЧ) болон профайл дээр харагдана. Ёс зүйн
+// гэрээний gating-д огт хамаарахгүй — гэрээгүй жижиг админд ч олгож болно.
+
+async function setAngel(id: number, isAngel: boolean): Promise<User> {
+  const rows = await db.select().from(users).where(eq(users.id, id)).limit(1);
+  if (!rows[0]) throw new HttpError(404, 'Хэрэглэгч олдсонгүй');
+  const updated = await db.update(users).set({ isAngel }).where(eq(users.id, id)).returning();
+  return publicUser(updated[0]);
+}
+
+router.post('/admin/users/:id/angel', requireAuth, requireAdmin, ah(async (req, res) => {
+  const user = await setAngel(parseId(req, 'Хэрэглэгч олдсонгүй'), true);
+  res.json({ user });
+}));
+
+router.post('/admin/users/:id/revoke-angel', requireAuth, requireAdmin, ah(async (req, res) => {
+  const user = await setAngel(parseId(req, 'Хэрэглэгч олдсонгүй'), false);
   res.json({ user });
 }));
 
