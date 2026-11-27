@@ -36,6 +36,11 @@ export async function runCleanup(): Promise<CleanupResult> {
   await db.execute(
     sql.raw(`DELETE FROM reactions WHERE target_type = 'comment' AND target_id NOT IN (SELECT id FROM post_comments)`),
   );
+  // Typing төлөв нь 5 секундын дараа хугацаа нь дуусна гэж уншигддаг —
+  // 60 секундээс хуучин мөрийг арилгана (ping нь 2 секунд тутамд ирдэг).
+  await db.execute(
+    sql.raw(`DELETE FROM typing_states WHERE updated_at < now() - interval '60 seconds'`),
+  );
   // Хугацаа нь дууссан банг олж, нэг мэдэгдэлд (CTE) тайлж түүхийг тэмдэглэнэ.
   // JS массивыг ANY($1) руу дамжуулах нь pg драйверт "malformed array literal"
   // алдаа өгдөг нь батлагдсан тул массив параметр ашиглахгүй.
