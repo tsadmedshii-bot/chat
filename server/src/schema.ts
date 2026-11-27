@@ -1,4 +1,4 @@
-import { boolean, integer, pgTable, serial, text, timestamp, uniqueIndex, varchar } from 'drizzle-orm/pg-core';
+import { boolean, integer, pgTable, primaryKey, serial, text, timestamp, uniqueIndex, varchar } from 'drizzle-orm/pg-core';
 
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
@@ -24,6 +24,9 @@ export const users = pgTable('users', {
   /** Жижиг админы сонгосон фонтын түлхүүр (жишээ нь 'lobster') —
       NULL = энгийн фонт. Эрх хураагдсан үед ч утга нь хадгалагдана. */
   textFont: text('text_font'),
+  /** Тэнгэр элчийн тэмдэг — ЗӨВХӨН гоёлын тэмдэг, ямар ч эрх дагалдахгүй.
+      Зөвхөн том админ олгоно/хураана (can_ban/can_style-тэй огт холбоогүй). */
+  isAngel: boolean('is_angel').notNull().default(false),
   /** Сүүлд идэвхтэй байсан цаг — heartbeat / нэвтрэлт / бүртгэлээс шинэчлэгдэнэ. */
   lastSeenAt: timestamp('last_seen_at'),
   /** Профайл зураг — data URL (JPEG/PNG/WebP, 500 KB хүртэл). */
@@ -43,6 +46,8 @@ export const posts = pgTable('posts', {
   id: serial('id').primaryKey(),
   authorId: integer('author_id').notNull().references(() => users.id),
   content: text('content').notNull(),
+  /** Постын зураг — data URL (JPEG/PNG/WebP, 1 MB хүртэл). NULL = зураггүй. */
+  image: text('image'),
   /** Зассан цаг — NULL = засагдаагүй. */
   editedAt: timestamp('edited_at'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
@@ -150,3 +155,15 @@ export const dmReads = pgTable('dm_reads', {
   partnerId: integer('partner_id').notNull().references(() => users.id),
   lastReadAt: timestamp('last_read_at').notNull().defaultNow(),
 }, (t) => [uniqueIndex('dm_reads_user_partner_unique').on(t.userId, t.partnerId)]);
+
+/** Typing төлөв — хэн, хаана бичиж байгаа.
+    scope: 'room' = нийтийн чат (target_id = 0), 'dm' = хувь чат
+    (target_id = ярилцагчийн id — бичиж буй хүний мессежийг ХҮЛЭЭЖ
+    АВАГЧ). updated_at-аас 5 секундын дараа хугацаа нь дуусна гэж
+    тооцно — цэвэрлэгээ нь 60 секундээс хуучин мөрийг арилгана. */
+export const typingStates = pgTable('typing_states', {
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  scope: varchar('scope', { length: 10 }).notNull(),
+  targetId: integer('target_id').notNull().default(0),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [primaryKey({ columns: [t.userId, t.scope, t.targetId] })]);
