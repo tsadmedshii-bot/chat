@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react';
 import type { User, UserProfile } from '../../../shared/src/types';
 import { ApiError, adminBanUser, adminUnbanUser, getUserProfile, me } from '../api';
-import { Avatar, RoleBadge } from './UserBadge';
+import { Avatar, AngelBadge, RoleBadge } from './UserBadge';
 import Lightbox from './Lightbox';
 
 /** Бангийн хугацааны шошго — Гишүүд хуудасныхтай ижил. */
@@ -180,6 +180,7 @@ export default function ProfileModal({
             <p className="muted">@{user.username}</p>
             <div className="profile-modal-badges">
               <RoleBadge role={user.role} />
+              {user.isAngel && <AngelBadge />}
               {isBannedUser(user) && (
                 <span className="banned-badge">
                   🚫 Бандуулсан
